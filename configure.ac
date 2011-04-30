@@ -13,10 +13,18 @@ PKG_CHECK_MODULES(
 	gobject-2.0
 	libxml-2.0
 	sqlite3);
+
 AC_SUBST(LIBACCOUNTS_CFLAGS)
 AC_SUBST(LIBACCOUNTS_LIBS)
 
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
+
+dnl Check for aegis-crypto library.
+PKG_CHECK_MODULES([AEGISCRYPTO], aegis-crypto >= 0.2.9, [HAVE_AEGISCRYPTO=yes], [HAVE_AEGISCRYPTO=no])
+AM_CONDITIONAL([HAVE_AEGISCRYPTO], [test x"$HAVE_AEGISCRYPTO" = xyes])
+if test x"$HAVE_AEGISCRYPTO" = xyes; then
+  AC_DEFINE([HAVE_AEGISCRYPTO], [1], [Define if aegis-crypto is available])
+fi
 
 AC_ISC_POSIX
 AC_PROG_CC
