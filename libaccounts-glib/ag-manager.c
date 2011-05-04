@@ -337,7 +337,7 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
     gboolean enabled = FALSE;
     gboolean must_instantiate = TRUE;
     DBusMessageIter iter;
-    GList *list;
+    GList *list, *node;
 
     if (!dbus_message_is_signal (msg, AG_DBUS_IFACE, AG_DBUS_SIG_CHANGED))
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
@@ -365,6 +365,7 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
     for (list = priv->emitted_signals; list != NULL; list = list->next)
     {
         EmittedSignalData *esd = list->data;
+        node = list;
 
         if (esd->ts.tv_sec == ts.tv_sec &&
             esd->ts.tv_nsec == ts.tv_nsec)
@@ -376,8 +377,9 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
 
             DEBUG_INFO ("Signal is ours, must_process = %d", esd->must_process);
             g_slice_free (EmittedSignalData, esd);
+            list = list->prev;
             priv->emitted_signals = g_list_delete_link (priv->emitted_signals,
-                                                        list);
+                                                        node);
             if (!must_process)
                 return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
         }
