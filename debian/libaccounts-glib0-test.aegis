@@ -1,0 +1,9 @@
+<aegis>
+    <request>
+        <credential name="libaccounts-glib0::accounts-glib-access" />
+        <credential name="libaccounts-glib0::t" />
+        <credential name="libaccounts-glib0::tok" />
+        <for path="/usr/bin/accounts-glib-testsuite" />
+    </request>
+</aegis>
+

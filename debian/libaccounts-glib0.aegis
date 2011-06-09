@@ -1,0 +1,7 @@
+<aegis>
+    <provide>
+        <credential name="accounts-glib-access" />
+        <credential name="t" />
+        <credential name="tok" />
+    </provide>
+</aegis>

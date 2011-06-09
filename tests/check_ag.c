@@ -44,6 +44,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <syslog.h>
+
 #define PROVIDER    "dummyprovider"
 #define TEST_STRING "Hey dude!"
 
@@ -1430,8 +1432,10 @@ START_TEST(test_sign_verify_key)
     const gchar *key = "test_key/";
     const gchar *key1 = "test_key/key1";
     const gchar *key2 = "test_key/key2";
-    const gchar *list_of_tokens[] = {"t", "tok", "token", NULL};
-    const gchar *token = "token";
+    const gchar *list_of_tokens[] = {"libaccounts-glib0::t", "libaccounts-glib0::tok", "libaccounts-glib0::accounts-glib-access", NULL};
+    const gchar *token = "libaccounts-glib0::accounts-glib-access";
+    const gchar *reply_token;
+    const gchar *reply_list_of_tokens[4];
     const gchar *data = "some value 1";
     const gchar *data2 = "some value 2";
     gboolean ok;
@@ -1441,6 +1445,7 @@ START_TEST(test_sign_verify_key)
     g_unlink (db_filename);
 
     g_type_init ();
+    g_debug ("##### RAMA [%s][%d] ENTER\n", __FUNCTION__, __LINE__);
 
     manager = ag_manager_new ();
     account = ag_manager_create_account (manager, PROVIDER);
@@ -1462,6 +1467,12 @@ START_TEST(test_sign_verify_key)
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
 
+    ok = ag_account_verify (account, key1, &reply_token);
+    fail_unless (!ok);
+
+    ok = ag_account_verify_with_tokens (account, key2, reply_list_of_tokens);
+    fail_unless (!ok);
+
     ag_account_sign (account, key1, token);
     ag_account_sign (account, key2, token);
 
@@ -1470,10 +1481,10 @@ START_TEST(test_sign_verify_key)
 
     fail_unless (account->id != 0, "Account ID is still 0!");
 
-    ok = ag_account_verify (account, key1, &token);
+    ok = ag_account_verify (account, key1, &reply_token);
     fail_unless (ok);
 
-    ok = ag_account_verify_with_tokens (account, key2, list_of_tokens);
+    ok = ag_account_verify_with_tokens (account, key2, reply_list_of_tokens);
     fail_unless (ok);
 
     /* testing with other service */
@@ -1493,6 +1504,12 @@ START_TEST(test_sign_verify_key)
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
 
+    ok = ag_account_verify (account, key1, &reply_token);
+    fail_unless (!ok);
+
+    ok = ag_account_verify_with_tokens (account, key2, reply_list_of_tokens);
+    fail_unless (!ok);
+
     ag_account_sign (account, key, token);
     ag_account_sign (account, key2, token);
 
@@ -1501,10 +1518,10 @@ START_TEST(test_sign_verify_key)
 
     fail_unless (account->id != 0, "Account ID is still 0!");
 
-    ok = ag_account_verify (account, key1, &token);
+    ok = ag_account_verify (account, key1, &reply_token);
     fail_unless (ok);
 
-    ok = ag_account_verify_with_tokens (account, key2, list_of_tokens);
+    ok = ag_account_verify_with_tokens (account, key2, reply_list_of_tokens);
     fail_unless (ok);
 
     end_test();

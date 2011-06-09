@@ -6,6 +6,7 @@ include /usr/share/cdbs/1/class/autotools.mk
 DEB_DH_INSTALL_SOURCEDIR=debian/tmp
 DEB_DESTDIR=$(CURDIR)/debian/tmp
 DEB_DH_STRIP_ARGS := --dbg-package=libaccounts-glib0
+DEBDIR = ..
 
 DEB_CONFIGURE_EXTRA_FLAGS += --enable-debug
 
@@ -45,3 +46,11 @@ debian/stamp-autotools-files:
 	gtkdocize
 	autoreconf -v --install
 	touch debian/stamp-autotools-files
+
+binary-arch:
+	dh_builddeb  --destdir=$(DEBDIR)
+	aegis-deb-add -control debian/libaccounts-glib0/DEBIAN/control .. debian/libaccounts-glib0.aegis=_aegis
+	aegis-deb-add -control debian/libaccounts-glib0-test/DEBIAN/control .. debian/libaccounts-glib0-test.aegis=_aegis
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure
