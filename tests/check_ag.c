@@ -2784,6 +2784,8 @@ int main(int argc, char **argv)
 
     if (argc > 1)
         test_case = argv[1];
+    else
+        test_case = g_getenv ("TEST_CASE");
 
     Suite * s = ag_suite(test_case);
     SRunner * sr = srunner_create(s);
