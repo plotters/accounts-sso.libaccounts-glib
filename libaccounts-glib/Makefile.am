@@ -21,6 +21,7 @@ libaccounts_glib_la_SOURCES = \
 	ag-account.h \
 	ag-account.c \
 	ag-account-service.c \
+	ag-auth-data.c \
 	ag-debug.h \
 	ag-debug.c \
 	ag-errors.h \
@@ -45,6 +46,7 @@ libaccounts_glib_include_HEADERS = \
 	accounts-glib.h \
 	ag-account.h \
 	ag-account-service.h \
+	ag-auth-data.h \
 	ag-errors.h \
 	ag-manager.h \
 	ag-provider.h \
@@ -72,6 +74,8 @@ introspection_sources = \
 	ag-account.h \
 	ag-account-service.c \
 	ag-account-service.h \
+	ag-auth-data.c \
+	ag-auth-data.h \
 	ag-errors.h \
 	ag-manager.c \
 	ag-manager.h \

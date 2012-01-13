@@ -64,6 +64,7 @@ ag_account_service_new
 ag_account_service_set_value
 ag_account_service_settings_iter_init
 ag_account_service_settings_iter_next
+ag_account_service_get_auth_data
 <SUBSECTION Private>
 AgAccountServiceClass
 <SUBSECTION Standard>
@@ -75,6 +76,19 @@ AG_IS_ACCOUNT_SERVICE_CLASS
 AG_TYPE_ACCOUNT_SERVICE
 AgAccountServicePrivate
 ag_account_service_get_type
+</SECTION>
+
+<SECTION>
+<FILE>ag-auth-data</FILE>
+<TITLE>AgAuthData</TITLE>
+AgAuthData
+ag_auth_data_get_mechanism
+ag_auth_data_get_method
+ag_auth_data_get_parameters
+ag_auth_data_get_type
+ag_auth_data_insert_parameters
+ag_auth_data_ref
+ag_auth_data_unref
 </SECTION>
 
 <SECTION>

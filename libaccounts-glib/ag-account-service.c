@@ -116,6 +116,7 @@
 #include "ag-internals.h"
 #include "ag-manager.h"
 #include "ag-service-type.h"
+#include "ag-util.h"
 
 enum {
     PROP_0,
@@ -523,6 +524,30 @@ ag_account_service_settings_iter_next (AgAccountSettingIter *iter,
                                        const GValue **value)
 {
     return ag_account_settings_iter_next (iter, key, value);
+}
+
+/**
+ * ag_account_service_get_auth_data:
+ * @self: the #AgAccountService.
+ *
+ * Reads the authentication data stored in the account (merging the
+ * service-specific settings with the global account settings) and returns an
+ * #AgAuthData structure.
+ * The method and mechanism are read from the "auth/method" and
+ * "auth/mechanism" keys, respectively. The authentication parameters are
+ * found under the "auth/<method>/<mechanism>/" group.
+ *
+ * Returns: (transfer full): a newly allocated #AgAuthData structure.
+ */
+AgAuthData *
+ag_account_service_get_auth_data (AgAccountService *self)
+{
+    AgAccountServicePrivate *priv;
+
+    g_return_val_if_fail (AG_IS_ACCOUNT_SERVICE (self), NULL);
+    priv = self->priv;
+
+    return _ag_auth_data_new (priv->account, priv->service);
 }
 
 /**

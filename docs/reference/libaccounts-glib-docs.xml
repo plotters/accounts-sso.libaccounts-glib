@@ -19,6 +19,7 @@
     <xi:include href="xml/ag-manager.xml"/>
     <xi:include href="xml/ag-account.xml"/>
     <xi:include href="xml/ag-account-service.xml"/>
+    <xi:include href="xml/ag-auth-data.xml"/>
     <xi:include href="xml/ag-provider.xml"/>
     <xi:include href="xml/ag-service.xml"/>
     <xi:include href="xml/ag-service-type.xml"/>

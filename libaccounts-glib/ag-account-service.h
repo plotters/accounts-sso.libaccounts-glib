@@ -27,6 +27,7 @@
 
 #include <glib-object.h>
 #include <libaccounts-glib/ag-account.h>
+#include <libaccounts-glib/ag-auth-data.h>
 #include <libaccounts-glib/ag-service.h>
 
 G_BEGIN_DECLS
@@ -119,6 +120,8 @@ void ag_account_service_settings_iter_init (AgAccountService *self,
 gboolean ag_account_service_settings_iter_next (AgAccountSettingIter *iter,
                                                 const gchar **key,
                                                 const GValue **value);
+
+AgAuthData *ag_account_service_get_auth_data (AgAccountService *self);
 
 gchar **ag_account_service_get_changed_fields (AgAccountService *self);
 
