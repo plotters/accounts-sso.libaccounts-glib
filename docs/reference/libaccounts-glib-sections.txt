@@ -14,6 +14,7 @@ ag_account_get_enabled
 ag_account_get_manager
 ag_account_get_provider_name
 ag_account_get_selected_service
+ag_account_get_settings_iter
 ag_account_get_value
 ag_account_list_enabled_services
 ag_account_list_services
@@ -25,6 +26,7 @@ ag_account_set_enabled
 ag_account_set_value
 ag_account_settings_iter_init
 ag_account_settings_iter_next
+ag_account_settings_iter_free
 ag_account_sign
 ag_account_store
 ag_account_store_blocking
@@ -56,6 +58,7 @@ ag_account_service_get_account
 ag_account_service_get_changed_fields
 ag_account_service_get_enabled
 ag_account_service_get_service
+ag_account_service_get_settings_iter
 ag_account_service_get_value
 ag_account_service_new
 ag_account_service_set_value
