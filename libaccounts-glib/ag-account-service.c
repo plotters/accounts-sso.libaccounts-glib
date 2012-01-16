@@ -535,7 +535,7 @@ ag_account_service_settings_iter_next (AgAccountSettingIter *iter,
  * #AgAuthData structure.
  * The method and mechanism are read from the "auth/method" and
  * "auth/mechanism" keys, respectively. The authentication parameters are
- * found under the "auth/<method>/<mechanism>/" group.
+ * found under the "auth/&lt;method&gt;/&lt;mechanism&gt;/" group.
  *
  * Returns: (transfer full): a newly allocated #AgAuthData structure.
  */

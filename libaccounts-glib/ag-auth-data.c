@@ -27,7 +27,7 @@
  * @short_description: information for account authentication.
  * @include: libaccounts-glib/ag-auth-data.h
  *
- * The #AgAccountData structure holds information on the authentication
+ * The #AgAuthData structure holds information on the authentication
  * parameters used by an account. It is created by
  * ag_account_service_get_auth_data(), and can be destroyed with
  * ag_auth_data_unref().
