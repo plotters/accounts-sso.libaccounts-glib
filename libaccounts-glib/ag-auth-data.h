@@ -30,6 +30,11 @@
 
 G_BEGIN_DECLS
 
+/**
+ * AgAuthData:
+ *
+ * Opaque structure. Use the accessor functions below.
+ */
 typedef struct _AgAuthData AgAuthData;
 
 GType ag_auth_data_get_type (void) G_GNUC_CONST;

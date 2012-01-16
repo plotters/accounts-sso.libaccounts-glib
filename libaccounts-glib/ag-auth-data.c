@@ -38,6 +38,7 @@
 #include "ag-util.h"
 
 struct _AgAuthData {
+    /*< private >*/
     gint ref_count;
     gchar *method;
     gchar *mechanism;
@@ -170,6 +171,8 @@ ag_auth_data_unref (AgAuthData *self)
  * ag_auth_data_get_method:
  * @self: the #AgAuthData.
  *
+ * Gets the authentication method.
+ *
  * Returns: the authentication method.
  */
 const gchar *
@@ -183,6 +186,8 @@ ag_auth_data_get_method (AgAuthData *self)
  * ag_auth_data_get_mechanism:
  * @self: the #AgAuthData.
  *
+ * Gets the authentication mechanism.
+ *
  * Returns: the authentication mechanism.
  */
 const gchar *
@@ -195,6 +200,8 @@ ag_auth_data_get_mechanism (AgAuthData *self)
 /**
  * ag_auth_data_get_parameters:
  * @self: the #AgAuthData.
+ *
+ * Gets the authentication parameters.
  *
  * Returns: (transfer none) (element-type utf8 GValue): a #GHashTable
  * containing all the authentication parameters.

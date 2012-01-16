@@ -85,10 +85,11 @@ AgAuthData
 ag_auth_data_get_mechanism
 ag_auth_data_get_method
 ag_auth_data_get_parameters
-ag_auth_data_get_type
 ag_auth_data_insert_parameters
 ag_auth_data_ref
 ag_auth_data_unref
+<SUBSECTION Standard>
+ag_auth_data_get_type
 </SECTION>
 
 <SECTION>
