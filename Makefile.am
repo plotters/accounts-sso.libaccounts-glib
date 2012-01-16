@@ -1,4 +1,7 @@
 SUBDIRS = libaccounts-glib docs tests tools
+if ENABLE_PYTHON
+SUBDIRS += pygobject
+endif
 
 ACLOCAL_AMFLAGS = -I m4
 
