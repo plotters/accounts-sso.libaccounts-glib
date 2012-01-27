@@ -219,50 +219,6 @@ read_provider_file (xmlTextReaderPtr reader, AgProvider *provider)
     return FALSE;
 }
 
-static gchar *
-find_provider_file (const gchar *provider_id)
-{
-    const gchar * const *dirs;
-    const gchar *dirname;
-    const gchar *env_dirname;
-    gchar *filename, *filepath;
-
-    filename = g_strdup_printf ("%s.provider", provider_id);
-    env_dirname = g_getenv ("AG_PROVIDERS");
-    if (env_dirname)
-    {
-        filepath = g_build_filename (env_dirname, filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    dirname = g_get_user_data_dir ();
-    if (G_LIKELY (dirname))
-    {
-        filepath = g_build_filename (dirname, "accounts/providers",
-                                              filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    dirs = g_get_system_data_dirs ();
-    for (dirname = *dirs; dirname != NULL; dirs++, dirname = *dirs)
-    {
-        filepath = g_build_filename (dirname, "accounts/providers",
-                                              filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    filepath = NULL;
-found:
-    g_free (filename);
-    return filepath;
-}
-
 static AgProvider *
 _ag_provider_new (void)
 {
@@ -286,7 +242,10 @@ _ag_provider_load_from_file (AgProvider *provider)
     g_return_val_if_fail (provider->name != NULL, FALSE);
 
     DEBUG_REFS ("Loading provider %s", provider->name);
-    filepath = find_provider_file (provider->name);
+    filepath = _ag_find_libaccounts_file (provider->name,
+                                          ".provider",
+                                          "AG_PROVIDERS",
+                                          "accounts/providers");
     if (G_UNLIKELY (!filepath)) return FALSE;
 
     g_file_get_contents (filepath, &provider->file_data,

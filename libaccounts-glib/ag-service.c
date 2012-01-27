@@ -277,50 +277,6 @@ read_service_file (xmlTextReaderPtr reader, AgService *service)
     return FALSE;
 }
 
-static gchar *
-find_service_file (const gchar *service_id)
-{
-    const gchar * const *dirs;
-    const gchar *dirname;
-    const gchar *env_dirname;
-    gchar *filename, *filepath;
-
-    filename = g_strdup_printf ("%s.service", service_id);
-    env_dirname = g_getenv ("AG_SERVICES");
-    if (env_dirname)
-    {
-        filepath = g_build_filename (env_dirname, filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    dirname = g_get_user_data_dir ();
-    if (G_LIKELY (dirname))
-    {
-        filepath = g_build_filename (dirname, "accounts/services",
-                                              filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    dirs = g_get_system_data_dirs ();
-    for (dirname = *dirs; dirname != NULL; dirs++, dirname = *dirs)
-    {
-        filepath = g_build_filename (dirname, "accounts/services",
-                                              filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    filepath = NULL;
-found:
-    g_free (filename);
-    return filepath;
-}
-
 AgService *
 _ag_service_new (void)
 {
@@ -344,7 +300,10 @@ _ag_service_load_from_file (AgService *service)
     g_return_val_if_fail (service->name != NULL, FALSE);
 
     DEBUG_REFS ("Loading service %s", service->name);
-    filepath = find_service_file (service->name);
+    filepath = _ag_find_libaccounts_file (service->name,
+                                          ".service",
+                                          "AG_SERVICES",
+                                          "accounts/services");
     if (G_UNLIKELY (!filepath)) return FALSE;
 
     g_file_get_contents (filepath, &service->file_data,
