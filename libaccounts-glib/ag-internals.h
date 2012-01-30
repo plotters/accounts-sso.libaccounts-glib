@@ -182,4 +182,13 @@ void _ag_account_settings_iter_init (AgAccount *account,
 G_GNUC_INTERNAL
 AgServiceType *_ag_service_type_new_from_file (const gchar *service_type_name);
 
+/* Application functions */
+G_GNUC_INTERNAL
+AgApplication *_ag_application_new_from_file (const gchar *application_name);
+
+/* Application functions */
+G_GNUC_INTERNAL
+gboolean _ag_application_supports_service (AgApplication *self,
+                                           AgService *service);
+
 #endif /* _AG_INTERNALS_H_ */

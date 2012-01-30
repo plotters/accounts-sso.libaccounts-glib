@@ -89,7 +89,7 @@ introspection_sources = \
 	ag-types.h
 
 Accounts-1.0.gir: libaccounts-glib.la
-Accounts_1_0_gir_INCLUDES = GObject-2.0
+Accounts_1_0_gir_INCLUDES = GObject-2.0 Gio-2.0
 Accounts_1_0_gir_SCANNERFLAGS = \
 	--identifier-prefix=Ag \
 	--symbol-prefix=ag \

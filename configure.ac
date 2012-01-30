@@ -15,6 +15,7 @@ PKG_CHECK_MODULES(
 	dbus-glib-1
 	glib-2.0 >= 2.26
 	gio-2.0 >= 2.30
+	gio-unix-2.0
 	gobject-2.0
 	libxml-2.0
 	sqlite3 >= 3.7.0);
@@ -35,6 +36,11 @@ DATABASE_DIR=".accounts"
 AC_SUBST(DATABASE_DIR)
 AC_DEFINE_UNQUOTED(DATABASE_DIR, "$DATABASE_DIR",
 		   [Directory for storing database])
+
+APPLICATION_FILES_DIR="accounts/applications"
+AC_SUBST(APPLICATION_FILES_DIR)
+AC_DEFINE_UNQUOTED(APPLICATION_FILES_DIR, "$APPLICATION_FILES_DIR",
+		   [Directory for storing application definition files])
 
 SERVICE_TYPE_FILES_DIR="accounts/service_types"
 AC_SUBST(SERVICE_TYPE_FILES_DIR)
