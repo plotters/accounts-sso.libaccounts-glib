@@ -245,7 +245,7 @@ _ag_provider_load_from_file (AgProvider *provider)
     filepath = _ag_find_libaccounts_file (provider->name,
                                           ".provider",
                                           "AG_PROVIDERS",
-                                          "accounts/providers");
+                                          PROVIDER_FILES_DIR);
     if (G_UNLIKELY (!filepath)) return FALSE;
 
     g_file_get_contents (filepath, &provider->file_data,

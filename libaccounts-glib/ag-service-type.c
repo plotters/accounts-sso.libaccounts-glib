@@ -158,7 +158,7 @@ _ag_service_type_load_from_file (AgServiceType *service_type)
     filepath = _ag_find_libaccounts_file (service_type->name,
                                           ".service-type",
                                           "AG_SERVICE_TYPES",
-                                          "accounts/service-types");
+                                          SERVICE_TYPE_FILES_DIR);
     if (G_UNLIKELY (!filepath)) return FALSE;
 
     g_file_get_contents (filepath, &service_type->file_data,

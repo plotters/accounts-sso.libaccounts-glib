@@ -303,7 +303,7 @@ _ag_service_load_from_file (AgService *service)
     filepath = _ag_find_libaccounts_file (service->name,
                                           ".service",
                                           "AG_SERVICES",
-                                          "accounts/services");
+                                          SERVICE_FILES_DIR);
     if (G_UNLIKELY (!filepath)) return FALSE;
 
     g_file_get_contents (filepath, &service->file_data,
