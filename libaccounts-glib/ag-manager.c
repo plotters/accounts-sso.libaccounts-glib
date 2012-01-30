@@ -234,6 +234,22 @@ finish:
     return file_list;
 }
 
+static AgApplication *
+_ag_manager_get_application (AgManager *self, const gchar *application_name)
+{
+    g_return_val_if_fail (AG_IS_MANAGER (self), NULL);
+
+    return _ag_application_new_from_file (application_name);
+}
+
+static inline GList *
+_ag_applications_list (AgManager *self)
+{
+    return list_data_files (self, ".application",
+                            "AG_APPLICATIONS", APPLICATION_FILES_DIR,
+                            (AgDataFileLoadFunc)_ag_manager_get_application);
+}
+
 static inline GList *
 _ag_providers_list (AgManager *self)
 {
@@ -2368,5 +2384,44 @@ ag_manager_load_service_type (AgManager *manager, const gchar *service_type)
      * might change in the future.
      */
     return _ag_service_type_new_from_file (service_type);
+}
+
+/**
+ * ag_manager_list_applications_by_service:
+ * @manager: the #AgManager.
+ * @service: the service for which we want to get the applications list.
+ *
+ * Lists the registered applications supporting the given service.
+ *
+ * Returns: (transfer full) (element-type AgApplication): a #GList of all the
+ * applications which have declared support for the given service or for its
+ * service type.
+ */
+GList *
+ag_manager_list_applications_by_service (AgManager *manager,
+                                         AgService *service)
+{
+    GList *applications = NULL;
+    GList *all_applications, *list;
+
+    g_return_val_if_fail (AG_IS_MANAGER (manager), NULL);
+    g_return_val_if_fail (service != NULL, NULL);
+
+    all_applications = _ag_applications_list (manager);
+    for (list = all_applications; list != NULL; list = list->next)
+    {
+        AgApplication *application = list->data;
+        if (_ag_application_supports_service (application, service))
+        {
+            applications = g_list_prepend (applications, application);
+        }
+        else
+        {
+            ag_application_unref (application);
+        }
+    }
+    g_list_free (all_applications);
+
+    return applications;
 }
 

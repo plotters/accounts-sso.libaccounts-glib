@@ -26,6 +26,7 @@
 #define _AG_MANAGER_H_
 
 #include <glib-object.h>
+#include <libaccounts-glib/ag-application.h>
 #include <libaccounts-glib/ag-provider.h>
 #include <libaccounts-glib/ag-service.h>
 #include <libaccounts-glib/ag-service-type.h>
@@ -117,6 +118,9 @@ gboolean ag_manager_get_abort_on_db_timeout (AgManager *manager);
 
 AgServiceType *ag_manager_load_service_type (AgManager *manager,
                                              const gchar *service_type);
+
+GList *ag_manager_list_applications_by_service (AgManager *manager,
+                                                AgService *service);
 
 G_END_DECLS
 
