@@ -22,15 +22,20 @@ test_process_LDADD = \
 
 TESTS_ENVIRONMENT = \
 	ACCOUNTS=/tmp/ \
+	AG_APPLICATIONS=$(top_srcdir)/tests/ \
 	AG_SERVICES=$(top_srcdir)/tests/ \
 	AG_SERVICE_TYPES=$(top_srcdir)/tests/ \
-	AG_PROVIDERS=$(top_srcdir)/tests/
+	AG_PROVIDERS=$(top_srcdir)/tests/ \
+	AG_DEBUG=all \
+	G_MESSAGES_DEBUG=all
 
 TESTS = accounts-glib-testsuite
 
 testdata_DATA = \
 	tests.xml \
 	e-mail.service-type \
+	Gallery.application \
+	Mailer.application \
 	MyProvider.provider \
 	MyService.service \
 	MyService2.service \
@@ -39,6 +44,8 @@ testdata_DATA = \
 EXTRA_DIST = \
 	tests.xml \
 	e-mail.service-type \
+	Gallery.application \
+	Mailer.application \
 	MyProvider.provider \
 	MyService.service \
 	MyService2.service \

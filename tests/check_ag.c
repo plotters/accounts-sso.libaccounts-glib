@@ -767,6 +767,57 @@ START_TEST(test_account_service_list)
 }
 END_TEST
 
+START_TEST(test_application)
+{
+    AgService *email_service, *sharing_service;
+    AgApplication *application;
+    GList *list;
+    gint i;
+
+    g_type_init ();
+
+    manager = ag_manager_new ();
+
+    email_service = ag_manager_get_service (manager, "MyService");
+    fail_unless (email_service != NULL);
+
+    sharing_service = ag_manager_get_service (manager, "OtherService");
+    fail_unless (email_service != NULL);
+
+    list = ag_manager_list_applications_by_service (manager, email_service);
+    fail_unless (list != NULL);
+    fail_unless (g_list_length(list) == 1,
+                 "Got %d applications, expecting 1", g_list_length(list));
+
+    application = list->data;
+    fail_unless (g_strcmp0 (ag_application_get_name (application),
+                            "Mailer") == 0);
+    fail_unless (g_strcmp0 (ag_application_get_i18n_domain (application),
+                            "mailer-catalog") == 0);
+    fail_unless (g_strcmp0 (ag_application_get_description (application),
+                            "Mailer application") == 0);
+    fail_unless (g_strcmp0 (ag_application_get_service_usage (application,
+                                                              email_service),
+                            "Mailer can retrieve your e-mails") == 0);
+
+    list = ag_manager_list_applications_by_service (manager, sharing_service);
+    fail_unless (list != NULL);
+    fail_unless (g_list_length(list) == 1,
+                 "Got %d applications, expecting 1", g_list_length(list));
+
+    application = list->data;
+    fail_unless (g_strcmp0 (ag_application_get_name (application),
+                            "Gallery") == 0);
+    fail_unless (g_strcmp0 (ag_application_get_description (application),
+                            "Image gallery") == 0);
+    fail_unless (g_strcmp0 (ag_application_get_service_usage (application,
+                                                              sharing_service),
+                            "Publish images on OtherService") == 0);
+
+    end_test ();
+}
+END_TEST
+
 START_TEST(test_service)
 {
     GValue value = { 0 };
@@ -2724,6 +2775,11 @@ ag_suite(const char *test_case)
     tcase_add_test (tc, test_account_service_settings);
     tcase_add_test (tc, test_account_service_list);
     IF_TEST_CASE_ENABLED("AccountService")
+        suite_add_tcase (s, tc);
+
+    tc = tcase_create("Application");
+    tcase_add_test (tc, test_application);
+    IF_TEST_CASE_ENABLED("Application")
         suite_add_tcase (s, tc);
 
     tc = tcase_create("List");
