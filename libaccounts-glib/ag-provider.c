@@ -43,99 +43,9 @@
 #include <libxml/xmlreader.h>
 #include <string.h>
 
-static const gchar suffix[] = ".provider";
-#define SUFFIX_LEN (sizeof(suffix) - 1)
-
 G_DEFINE_BOXED_TYPE (AgProvider, ag_provider,
                      (GBoxedCopyFunc)ag_provider_ref,
                      (GBoxedFreeFunc)ag_provider_unref);
-
-static gint
-cmp_provider_name (AgProvider *provider, const gchar *provider_name)
-{
-    const gchar *name;
-
-    name = ag_provider_get_name (provider);
-    if (G_UNLIKELY (!name)) return 1;
-
-    return strcmp (name, provider_name);
-}
-
-static void
-add_providers_from_dir (AgManager *manager, const gchar *dirname,
-                       GList **providers)
-{
-    const gchar *filename;
-    AgProvider *provider;
-    gchar provider_name[256];
-    GDir *dir;
-
-    g_return_if_fail (providers != NULL);
-    g_return_if_fail (dirname != NULL);
-
-    dir = g_dir_open (dirname, 0, NULL);
-    if (!dir) return;
-
-    while ((filename = g_dir_read_name (dir)) != NULL)
-    {
-        if (filename[0] == '.')
-            continue;
-
-        if (!g_str_has_suffix (filename, suffix))
-            continue;
-
-        g_snprintf (provider_name, sizeof (provider_name),
-                    "%.*s", (gint) (strlen (filename) - SUFFIX_LEN), filename);
-
-        /* if there is already a provider with the same name in the list, then
-         * we skip this one (we process directories in descending order of
-         * priority) */
-        if (g_list_find_custom (*providers, provider_name,
-                                (GCompareFunc)cmp_provider_name))
-            continue;
-
-        provider = ag_manager_get_provider (manager, provider_name);
-        if (G_UNLIKELY (!provider)) continue;
-
-        *providers = g_list_prepend (*providers, provider);
-    }
-
-    g_dir_close (dir);
-}
-
-GList *
-_ag_providers_list (AgManager *manager)
-{
-    const gchar * const *dirs;
-    const gchar *env_dirname, *datadir;
-    gchar *dirname;
-    GList *providers = NULL;
-
-    env_dirname = g_getenv ("AG_PROVIDERS");
-    if (env_dirname)
-    {
-        add_providers_from_dir (manager, env_dirname, &providers);
-        /* If the environment variable is set, don't look in other places */
-        return providers;
-    }
-
-    datadir = g_get_user_data_dir ();
-    if (G_LIKELY (datadir))
-    {
-        dirname = g_build_filename (datadir, PROVIDER_FILES_DIR, NULL);
-        add_providers_from_dir (manager, dirname, &providers);
-        g_free (dirname);
-    }
-
-    dirs = g_get_system_data_dirs ();
-    for (datadir = *dirs; datadir != NULL; dirs++, datadir = *dirs)
-    {
-        dirname = g_build_filename (datadir, PROVIDER_FILES_DIR, NULL);
-        add_providers_from_dir (manager, dirname, &providers);
-        g_free (dirname);
-    }
-    return providers;
-}
 
 static gboolean
 parse_provider (xmlTextReaderPtr reader, AgProvider *provider)

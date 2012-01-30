@@ -41,99 +41,9 @@
 #include <libxml/xmlreader.h>
 #include <string.h>
 
-static const gchar suffix[] = ".service";
-#define SUFFIX_LEN (sizeof(suffix) - 1)
-
 G_DEFINE_BOXED_TYPE (AgService, ag_service,
                      (GBoxedCopyFunc)ag_service_ref,
                      (GBoxedFreeFunc)ag_service_unref);
-
-static gint
-cmp_service_name (AgService *service, const gchar *service_name)
-{
-    const gchar *name;
-
-    name = ag_service_get_name (service);
-    if (G_UNLIKELY (!name)) return 1;
-
-    return strcmp (name, service_name);
-}
-
-static void
-add_services_from_dir (AgManager *manager, const gchar *dirname,
-                       GList **services)
-{
-    const gchar *filename;
-    AgService *service;
-    gchar service_name[256];
-    GDir *dir;
-
-    g_return_if_fail (services != NULL);
-    g_return_if_fail (dirname != NULL);
-
-    dir = g_dir_open (dirname, 0, NULL);
-    if (!dir) return;
-
-    while ((filename = g_dir_read_name (dir)) != NULL)
-    {
-        if (filename[0] == '.')
-            continue;
-
-        if (!g_str_has_suffix (filename, suffix))
-            continue;
-
-        g_snprintf (service_name, sizeof (service_name),
-                    "%.*s", (gint) (strlen (filename) - SUFFIX_LEN), filename);
-
-        /* if there is already a service with the same name in the list, then
-         * we skip this one (we process directories in descending order of
-         * priority) */
-        if (g_list_find_custom (*services, service_name,
-                                (GCompareFunc)cmp_service_name))
-            continue;
-
-        service = ag_manager_get_service (manager, service_name);
-        if (G_UNLIKELY (!service)) continue;
-
-        *services = g_list_prepend (*services, service);
-    }
-
-    g_dir_close (dir);
-}
-
-GList *
-_ag_services_list (AgManager *manager)
-{
-    const gchar * const *dirs;
-    const gchar *env_dirname, *datadir;
-    gchar *dirname;
-    GList *services = NULL;
-
-    env_dirname = g_getenv ("AG_SERVICES");
-    if (env_dirname)
-    {
-        add_services_from_dir (manager, env_dirname, &services);
-        /* If the environment variable is set, don't look in other places */
-        return services;
-    }
-
-    datadir = g_get_user_data_dir ();
-    if (G_LIKELY (datadir))
-    {
-        dirname = g_build_filename (datadir, SERVICE_FILES_DIR, NULL);
-        add_services_from_dir (manager, dirname, &services);
-        g_free (dirname);
-    }
-
-    dirs = g_get_system_data_dirs ();
-    for (datadir = *dirs; datadir != NULL; dirs++, datadir = *dirs)
-    {
-        dirname = g_build_filename (datadir, SERVICE_FILES_DIR, NULL);
-        add_services_from_dir (manager, dirname, &services);
-        g_free (dirname);
-    }
-    return services;
-}
 
 static gboolean
 parse_template (xmlTextReaderPtr reader, AgService *service)

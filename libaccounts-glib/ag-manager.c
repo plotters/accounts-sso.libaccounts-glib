@@ -30,6 +30,7 @@
  * The #AgManager is the main object in this library.
  */
 
+#include "config.h"
 #include "ag-manager.h"
 
 #include "ag-account-service.h"
@@ -129,6 +130,125 @@ G_DEFINE_TYPE (AgManager, ag_manager, G_TYPE_OBJECT);
 
 static void store_cb_data_free (StoreCbData *sd);
 static void account_weak_notify (gpointer userdata, GObject *dead_account);
+
+typedef gpointer (*AgDataFileLoadFunc) (AgManager *self,
+                                        const gchar *base_name);
+
+static void
+add_data_files_from_dir (AgManager *manager, const gchar *dirname,
+                         GHashTable *loaded_files, const gchar *suffix,
+                         AgDataFileLoadFunc load_file_func)
+{
+    const gchar *filename;
+    gchar *base_name;
+    gint suffix_length;
+    gpointer loaded_file;
+    GDir *dir;
+
+    g_return_if_fail (dirname != NULL);
+
+    dir = g_dir_open (dirname, 0, NULL);
+    if (!dir) return;
+
+    suffix_length = strlen (suffix);
+
+    while ((filename = g_dir_read_name (dir)) != NULL)
+    {
+        if (filename[0] == '.')
+            continue;
+
+        if (!g_str_has_suffix (filename, suffix))
+            continue;
+
+        base_name = g_strndup (filename, (strlen (filename) - suffix_length));
+
+        /* if there is already a service with the same name in the list, then
+         * we skip this one (we process directories in descending order of
+         * priority) */
+        if (g_hash_table_lookup (loaded_files, base_name) != NULL)
+        {
+            g_free (base_name);
+            continue;
+        }
+
+        loaded_file = load_file_func (manager, base_name);
+        if (G_UNLIKELY (!loaded_file))
+        {
+            g_free (base_name);
+            continue;
+        }
+
+        g_hash_table_insert (loaded_files, base_name, loaded_file);
+    }
+
+    g_dir_close (dir);
+}
+
+static GList *
+list_data_files (AgManager *manager,
+                 const gchar *suffix,
+                 const gchar *env_var,
+                 const gchar *subdir,
+                 AgDataFileLoadFunc load_file_func)
+{
+    GHashTable *loaded_files;
+    GList *file_list;
+    const gchar * const *dirs;
+    const gchar *env_dirname, *datadir;
+    gchar *dirname;
+
+    loaded_files = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                          g_free, NULL);
+
+    env_dirname = g_getenv (env_var);
+    if (env_dirname)
+    {
+        add_data_files_from_dir (manager, env_dirname, loaded_files, suffix,
+                                 load_file_func);
+        /* If the environment variable is set, don't look in other places */
+        goto finish;
+    }
+
+    datadir = g_get_user_data_dir ();
+    if (G_LIKELY (datadir))
+    {
+        dirname = g_build_filename (datadir, subdir, NULL);
+        add_data_files_from_dir (manager, dirname, loaded_files, suffix,
+                                 load_file_func);
+        g_free (dirname);
+    }
+
+    dirs = g_get_system_data_dirs ();
+    for (datadir = *dirs; datadir != NULL; dirs++, datadir = *dirs)
+    {
+        dirname = g_build_filename (datadir, subdir, NULL);
+        add_data_files_from_dir (manager, dirname, loaded_files, suffix,
+                                 load_file_func);
+        g_free (dirname);
+    }
+
+finish:
+    file_list = g_hash_table_get_values (loaded_files);
+    g_hash_table_unref (loaded_files);
+
+    return file_list;
+}
+
+static inline GList *
+_ag_providers_list (AgManager *self)
+{
+    return list_data_files (self, ".provider",
+                            "AG_PROVIDERS", PROVIDER_FILES_DIR,
+                            (AgDataFileLoadFunc)ag_manager_get_provider);
+}
+
+static inline GList *
+_ag_services_list (AgManager *self)
+{
+    return list_data_files (self, ".service",
+                            "AG_SERVICES", SERVICE_FILES_DIR,
+                            (AgDataFileLoadFunc)ag_manager_get_service);
+}
 
 static GList *
 get_account_services_from_accounts (AgManager *manager,
