@@ -133,50 +133,6 @@ read_service_type_file (xmlTextReaderPtr reader, AgServiceType *service_type)
     return FALSE;
 }
 
-static gchar *
-find_service_type_file (const gchar *service_id)
-{
-    const gchar * const *dirs;
-    const gchar *dirname;
-    const gchar *env_dirname;
-    gchar *filename, *filepath;
-
-    filename = g_strdup_printf ("%s.service-type", service_id);
-    env_dirname = g_getenv ("AG_SERVICE_TYPES");
-    if (env_dirname)
-    {
-        filepath = g_build_filename (env_dirname, filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    dirname = g_get_user_data_dir ();
-    if (G_LIKELY (dirname))
-    {
-        filepath = g_build_filename (dirname, "accounts/service-types",
-                                              filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    dirs = g_get_system_data_dirs ();
-    for (dirname = *dirs; dirname != NULL; dirs++, dirname = *dirs)
-    {
-        filepath = g_build_filename (dirname, "accounts/service-types",
-                                              filename, NULL);
-        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
-            goto found;
-        g_free (filepath);
-    }
-
-    filepath = NULL;
-found:
-    g_free (filename);
-    return filepath;
-}
-
 static AgServiceType *
 _ag_service_type_new (void)
 {
@@ -199,7 +155,10 @@ _ag_service_type_load_from_file (AgServiceType *service_type)
     g_return_val_if_fail (service_type->name != NULL, FALSE);
 
     DEBUG_REFS ("Loading service_type %s", service_type->name);
-    filepath = find_service_type_file (service_type->name);
+    filepath = _ag_find_libaccounts_file (service_type->name,
+                                          ".service-type",
+                                          "AG_SERVICE_TYPES",
+                                          SERVICE_TYPE_FILES_DIR);
     if (G_UNLIKELY (!filepath)) return FALSE;
 
     g_file_get_contents (filepath, &service_type->file_data,

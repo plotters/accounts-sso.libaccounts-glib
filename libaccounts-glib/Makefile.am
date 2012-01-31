@@ -21,6 +21,8 @@ libaccounts_glib_la_SOURCES = \
 	ag-account.h \
 	ag-account.c \
 	ag-account-service.c \
+	ag-application.h \
+	ag-application.c \
 	ag-auth-data.c \
 	ag-debug.h \
 	ag-debug.c \
@@ -46,6 +48,7 @@ libaccounts_glib_include_HEADERS = \
 	accounts-glib.h \
 	ag-account.h \
 	ag-account-service.h \
+	ag-application.h \
 	ag-auth-data.h \
 	ag-errors.h \
 	ag-manager.h \
@@ -74,6 +77,8 @@ introspection_sources = \
 	ag-account.h \
 	ag-account-service.c \
 	ag-account-service.h \
+	ag-application.c \
+	ag-application.h \
 	ag-auth-data.c \
 	ag-auth-data.h \
 	ag-errors.h \
@@ -88,7 +93,7 @@ introspection_sources = \
 	ag-types.h
 
 Accounts-1.0.gir: libaccounts-glib.la
-Accounts_1_0_gir_INCLUDES = GObject-2.0
+Accounts_1_0_gir_INCLUDES = GObject-2.0 Gio-2.0
 Accounts_1_0_gir_SCANNERFLAGS = \
 	--identifier-prefix=Ag \
 	--symbol-prefix=ag \

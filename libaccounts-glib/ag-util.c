@@ -593,3 +593,60 @@ _ag_dbus_escape_as_identifier (const gchar *name)
     return g_string_free (op, FALSE);
 }
 
+/**
+ * _ag_find_libaccounts_file:
+ * @file_id: the base name of the file, without suffix.
+ * @suffix: the file suffix.
+ * @env_var: name of the environment variable which could specify an override
+ * path.
+ * @subdir: file will be searched in $XDG_DATA_DIRS/<subdir>/
+ *
+ * Search for the libaccounts file @file_id.
+ *
+ * Returns: the path of the file, if found, %NULL otherwise.
+ */
+gchar *
+_ag_find_libaccounts_file (const gchar *file_id,
+                           const gchar *suffix,
+                           const gchar *env_var,
+                           const gchar *subdir)
+{
+    const gchar * const *dirs;
+    const gchar *dirname;
+    const gchar *env_dirname;
+    gchar *filename, *filepath;
+
+    filename = g_strconcat (file_id, suffix, NULL);
+    env_dirname = g_getenv (env_var);
+    if (env_dirname)
+    {
+        filepath = g_build_filename (env_dirname, filename, NULL);
+        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
+            goto found;
+        g_free (filepath);
+    }
+
+    dirname = g_get_user_data_dir ();
+    if (G_LIKELY (dirname))
+    {
+        filepath = g_build_filename (dirname, subdir, filename, NULL);
+        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
+            goto found;
+        g_free (filepath);
+    }
+
+    dirs = g_get_system_data_dirs ();
+    for (dirname = *dirs; dirname != NULL; dirs++, dirname = *dirs)
+    {
+        filepath = g_build_filename (dirname, subdir, filename, NULL);
+        if (g_file_test (filepath, G_FILE_TEST_IS_REGULAR))
+            goto found;
+        g_free (filepath);
+    }
+
+    filepath = NULL;
+found:
+    g_free (filename);
+    return filepath;
+}
+

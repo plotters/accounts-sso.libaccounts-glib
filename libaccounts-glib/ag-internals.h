@@ -128,9 +128,6 @@ struct _AgService {
 };
 
 G_GNUC_INTERNAL
-GList *_ag_services_list (AgManager *manager);
-
-G_GNUC_INTERNAL
 AgService *_ag_service_new_from_file (const gchar *service_name);
 G_GNUC_INTERNAL
 AgService *_ag_service_new_from_memory (const gchar *service_name,
@@ -156,9 +153,6 @@ struct _AgProvider {
     gchar *display_name;
     gchar *file_data;
 };
-
-G_GNUC_INTERNAL
-GList *_ag_providers_list (AgManager *manager);
 
 G_GNUC_INTERNAL
 AgProvider *_ag_provider_new_from_file (const gchar *provider_name);
@@ -192,5 +186,14 @@ AgServiceType *_ag_service_type_new_from_file (const gchar *service_type_name);
 /* AgAuthData functions */
 G_GNUC_INTERNAL
 AgAuthData *_ag_auth_data_new (AgAccount *account, AgService *service);
+
+/* Application functions */
+G_GNUC_INTERNAL
+AgApplication *_ag_application_new_from_file (const gchar *application_name);
+
+/* Application functions */
+G_GNUC_INTERNAL
+gboolean _ag_application_supports_service (AgApplication *self,
+                                           AgService *service);
 
 #endif /* _AG_INTERNALS_H_ */

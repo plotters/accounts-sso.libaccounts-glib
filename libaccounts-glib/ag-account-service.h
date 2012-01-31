@@ -51,19 +51,6 @@ typedef struct _AgAccountServicePrivate AgAccountServicePrivate;
 typedef struct _AgAccountService AgAccountService;
 
 /**
- * AgAccountServiceNotifyCb:
- * @self: a #AgAccountService.
- * @key: the key that was changed
- * @user_data: user data set when the signal was connected
- *
- * Notification callback for when @self is modified.
- *
- * @see_also: account_watch_cb
- */
-typedef void (*AgAccountServiceNotifyCb) (AgAccountService *self, const gchar *key,
-                                   gpointer user_data);
-
-/**
  * AgAccountServiceClass:
  *
  * Use the accessor functions below.

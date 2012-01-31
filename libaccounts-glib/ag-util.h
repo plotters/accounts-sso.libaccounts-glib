@@ -76,6 +76,12 @@ gboolean _ag_xml_parse_settings (xmlTextReaderPtr reader, const gchar *group,
 G_GNUC_INTERNAL
 gchar *_ag_dbus_escape_as_identifier (const gchar *name);
 
+G_GNUC_INTERNAL
+gchar *_ag_find_libaccounts_file (const gchar *file_id,
+                                  const gchar *suffix,
+                                  const gchar *env_var,
+                                  const gchar *subdir);
+
 G_END_DECLS
 
 #endif /* _AG_UTIL_H_ */
