@@ -616,7 +616,7 @@ _ag_find_libaccounts_file (const gchar *file_id,
     const gchar *env_dirname;
     gchar *filename, *filepath;
 
-    filename = g_strdup_printf ("%s%s", file_id, suffix);
+    filename = g_strconcat (file_id, suffix, NULL);
     env_dirname = g_getenv (env_var);
     if (env_dirname)
     {
