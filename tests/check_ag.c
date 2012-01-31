@@ -799,6 +799,8 @@ START_TEST(test_application)
     fail_unless (g_strcmp0 (ag_application_get_service_usage (application,
                                                               email_service),
                             "Mailer can retrieve your e-mails") == 0);
+    ag_application_unref (application);
+    g_list_free (list);
 
     list = ag_manager_list_applications_by_service (manager, sharing_service);
     fail_unless (list != NULL);
@@ -813,6 +815,8 @@ START_TEST(test_application)
     fail_unless (g_strcmp0 (ag_application_get_service_usage (application,
                                                               sharing_service),
                             "Publish images on OtherService") == 0);
+    ag_application_unref (application);
+    g_list_free (list);
 
     end_test ();
 }
