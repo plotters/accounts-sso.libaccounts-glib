@@ -425,7 +425,8 @@ ag_application_get_desktop_app_info (AgApplication *self)
 {
     g_return_val_if_fail (self != NULL, NULL);
     _ag_application_ensure_desktop_app_info (self);
-    return self->desktop_app_info;
+    return self->desktop_app_info != NULL ?
+        g_object_ref (self->desktop_app_info) : NULL;
 }
 
 /**
