@@ -53,6 +53,7 @@ struct _AgServiceType {
     gchar *icon_name;
     gchar *file_data;
     gsize file_data_len;
+    GHashTable *tags;
 };
 
 G_DEFINE_BOXED_TYPE (AgServiceType, ag_service_type,
@@ -102,6 +103,11 @@ parse_service_type (xmlTextReaderPtr reader, AgServiceType *service_type)
             {
                 ok = _ag_xml_dup_element_data (reader,
                                                &service_type->i18n_domain);
+            }
+            else if (strcmp (name, "tags") == 0)
+            {
+                ok = _ag_xml_parse_element_list (reader, "tag",
+                                         &service_type->tags);
             }
             else
                 ok = TRUE;
@@ -264,6 +270,22 @@ ag_service_type_get_icon_name (AgServiceType *service_type)
 }
 
 /**
+ * ag_service_type_get_tags:
+ * @service_type: the #AgServiceType.
+ * 
+ * Get list of tags specified for the #AgServiceType.
+ * 
+ * Returns: (transfer container) (element-type string): #Glist of tags for @service_type.
+ * List must be freed with g_list_free(). Entries are owned by the #AgServiceType type,
+ * do not free.
+ */
+GList *ag_service_type_get_tags (AgServiceType *service_type)
+{
+    g_return_val_if_fail (service_type != NULL, NULL);
+    return g_hash_table_get_keys (service_type->tags);
+}
+
+/**
  * ag_service_type_get_file_contents:
  * @service_type: the #AgServiceType.
  * @contents: location to receive the pointer to the file contents.
@@ -329,6 +351,7 @@ ag_service_type_unref (AgServiceType *service_type)
         g_free (service_type->display_name);
         g_free (service_type->icon_name);
         g_free (service_type->file_data);
+        g_hash_table_destroy (service_type->tags);
         g_slice_free (AgServiceType, service_type);
     }
 }

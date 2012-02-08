@@ -1424,10 +1424,10 @@ END_TEST
 
 START_TEST(test_list_service_types)
 {
-    GList *service_types, *list;
+    GList *service_types, *list, *tags, *tag_list;
     gint n_service_types;
     AgServiceType *service_type;
-    const gchar *name;
+    const gchar *name, *tag;
 
     g_type_init ();
     manager = ag_manager_new ();
@@ -1447,6 +1447,17 @@ START_TEST(test_list_service_types)
         g_debug ("Service type name: %s", name);
         fail_unless (g_strcmp0 (name, "e-mail") == 0,
                      "Got unexpected service type `%s'", name);
+        
+        tags = ag_service_type_get_tags (service_type);
+        for (tag_list = tags; tag_list != NULL; tag_list = tag_list->next)
+        {
+            tag = (gchar *) tag_list->data;
+            g_debug (" Service type tag: %s", tag);
+            fail_unless ((g_strcmp0 (tag, "e-mail") == 0 ||
+                          g_strcmp0 (tag, "messaging") == 0),
+                         "Got unexpected service type tag `%s'", tag);
+        }
+        g_list_free (tags);
     }
     ag_service_type_list_free (service_types);
 
