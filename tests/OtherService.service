@@ -3,7 +3,11 @@
   <type>sharing</type>
   <name>Other Service</name>
   <icon>general_otherservice</icon>
-
+  <tags>
+      <tag>video</tag>
+      <tag>sharing</tag>
+  </tags>
+  
   <!-- default settings (account settings have precedence over these) -->
   <template>
     <group name="parameters">

@@ -828,6 +828,7 @@ START_TEST(test_service)
 {
     GValue value = { 0 };
     AgService *service2;
+    GList *tag_list, *list;
     AgAccountId account_id;
     const gchar *provider_name, *service_type, *service_name, *icon_name;
     const gchar *description = "This is really a beautiful account";
@@ -836,6 +837,10 @@ START_TEST(test_service)
     const gboolean check_automatically = TRUE;
     const gchar *display_name = "My test account";
     const gchar **string_list;
+    const gchar *tags[] = {
+        "video",
+        "sharing"
+    };
     const gchar *capabilities[] = {
         "chat",
         "file",
@@ -883,6 +888,17 @@ START_TEST(test_service)
     icon_name = ag_service_get_icon_name (service);
     fail_unless (g_strcmp0 (icon_name, "general_myservice") == 0,
                  "Wrong service icon name: %s", icon_name);
+    
+    tag_list = ag_service_get_tags (service);
+    fail_unless (tag_list != NULL);
+    for (list = tag_list; list != NULL; list = list->next)
+    {
+        g_debug(" Service tag: %s", list->data);
+        fail_unless (g_strcmp0 (list->data, "e-mail") == 0 ||
+                     g_strcmp0 (list->data, "messaging") == 0,
+                     "Wrong service tag: %s", list->data);
+    }
+    g_list_free (tag_list);
 
     ag_account_set_enabled (account, FALSE);
     ag_account_set_display_name (account, display_name);
@@ -932,6 +948,18 @@ START_TEST(test_service)
     g_value_unset (&value);
 
     service2 = ag_manager_get_service (manager, "OtherService");
+
+    tag_list = ag_service_get_tags (service2);
+    fail_unless (tag_list != NULL);
+    for (list = tag_list; list != NULL; list = list->next)
+    {
+        g_debug(" Service tag: %s", list->data);
+        fail_unless (g_strcmp0 (list->data, "video") == 0 ||
+                     g_strcmp0 (list->data, "sharing") == 0,
+                     "Wrong service tag: %s", list->data);
+    }
+    g_list_free (tag_list);
+    
     ag_account_select_service (account, service2);
 
     g_value_init (&value, G_TYPE_STRING);

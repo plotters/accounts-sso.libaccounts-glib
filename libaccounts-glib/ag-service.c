@@ -36,6 +36,7 @@
 #include "config.h"
 #include "ag-service.h"
 
+#include "ag-service-type.h"
 #include "ag-internals.h"
 #include "ag-util.h"
 #include <libxml/xmlreader.h>
@@ -154,6 +155,11 @@ parse_service (xmlTextReaderPtr reader, AgService *service)
                 /* this element is placed after all the elements we are
                  * interested in: we can stop the parsing now */
                 return TRUE;
+            }
+            else if (strcmp (name, "tags") == 0)
+            {
+                ok = _ag_xml_parse_element_list (reader, "tag",
+                                                 &service->tags);
             }
             else
                 ok = TRUE;
@@ -406,6 +412,46 @@ ag_service_get_i18n_domain (AgService *service)
         _ag_service_load_from_file (service);
 
     return service->i18n_domain;
+}
+
+/**
+ * ag_service_get_tags:
+ * @service: the #AgService.
+ * 
+ * Get list of tags specified for the #AgService. If the service has not
+ * defined tags, tags from the service type will be returned.
+ * 
+ * Returns: (transfer container) (element-type string): #Glist of tags for @service.
+ * List must be freed with g_list_free(). Entries are owned by the #AgService type,
+ * do not free.
+ */
+GList *ag_service_get_tags (AgService *service)
+{
+    AgServiceType *type;
+    GList *type_tags, *tag_list;
+
+    g_return_val_if_fail (service != NULL, NULL);
+
+    if (service->tags == NULL)
+    {
+        type = _ag_service_type_new_from_file (service->type);
+        g_return_val_if_fail (type != NULL, NULL);
+        type_tags = ag_service_type_get_tags (type);
+        g_return_val_if_fail (type_tags != NULL, NULL);
+        service->tags = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                               g_free, NULL);
+        for (tag_list = type_tags;
+             tag_list != NULL;
+             tag_list = tag_list->next)
+        {
+            g_hash_table_insert (service->tags,
+                                 g_strdup(tag_list->data), NULL);
+        }
+        g_list_free (type_tags);
+        ag_service_type_unref (type);
+    }
+
+    return g_hash_table_get_keys (service->tags);
 }
 
 /**

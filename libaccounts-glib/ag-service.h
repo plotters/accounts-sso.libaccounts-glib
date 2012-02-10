@@ -45,6 +45,7 @@ const gchar *ag_service_get_service_type (AgService *service);
 const gchar *ag_service_get_provider (AgService *service);
 const gchar *ag_service_get_icon_name (AgService *service);
 const gchar *ag_service_get_i18n_domain (AgService *service);
+GList *ag_service_get_tags (AgService *service);
 void ag_service_get_file_contents (AgService *service,
                                    const gchar **contents,
                                    gsize *data_offset);

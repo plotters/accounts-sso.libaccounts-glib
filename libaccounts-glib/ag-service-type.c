@@ -107,7 +107,7 @@ parse_service_type (xmlTextReaderPtr reader, AgServiceType *service_type)
             else if (strcmp (name, "tags") == 0)
             {
                 ok = _ag_xml_parse_element_list (reader, "tag",
-                                         &service_type->tags);
+                                                 &service_type->tags);
             }
             else
                 ok = TRUE;

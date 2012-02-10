@@ -532,7 +532,7 @@ gboolean _ag_xml_parse_element_list (xmlTextReaderPtr reader, const gchar *match
             {
                 if (_ag_xml_dup_element_data (reader, &data))
                 {
-                    g_hash_table_insert(*list, data, NULL);
+                    g_hash_table_insert (*list, data, NULL);
                     ok = TRUE;
                 }
             }
