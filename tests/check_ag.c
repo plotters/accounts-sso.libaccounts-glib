@@ -837,10 +837,6 @@ START_TEST(test_service)
     const gboolean check_automatically = TRUE;
     const gchar *display_name = "My test account";
     const gchar **string_list;
-    const gchar *tags[] = {
-        "video",
-        "sharing"
-    };
     const gchar *capabilities[] = {
         "chat",
         "file",
@@ -899,7 +895,9 @@ START_TEST(test_service)
                      "Wrong service tag: %s", list->data);
     }
     g_list_free (tag_list);
-
+    fail_unless (ag_service_has_tag (service, "e-mail"),
+                 "Missing service tag");
+    
     ag_account_set_enabled (account, FALSE);
     ag_account_set_display_name (account, display_name);
 
@@ -959,6 +957,8 @@ START_TEST(test_service)
                      "Wrong service tag: %s", list->data);
     }
     g_list_free (tag_list);
+    fail_unless (ag_service_has_tag (service2, "sharing"),
+                 "Missing service tag");
     
     ag_account_select_service (account, service2);
 
@@ -1486,6 +1486,8 @@ START_TEST(test_list_service_types)
                          "Got unexpected service type tag `%s'", tag);
         }
         g_list_free (tags);
+        fail_unless (ag_service_type_has_tag (service_type, "messaging"),
+                     "Missing service type tag");
     }
     ag_service_type_list_free (service_types);
 

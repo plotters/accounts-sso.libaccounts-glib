@@ -270,6 +270,22 @@ ag_service_type_get_icon_name (AgServiceType *service_type)
 }
 
 /**
+ * ag_service_type_has_tag:
+ * @service_type: the #AgServiceType
+ * @tag: the tag to check for
+ * 
+ * Check if the #AgServiceType has the requested tag.
+ * 
+ * Returns: TRUE if th #AgServiceType has the tag, FALSE otherwise
+ */
+gboolean ag_service_type_has_tag (AgServiceType *service_type,
+                                  const gchar *tag)
+{
+    g_return_val_if_fail (service_type != NULL, FALSE);
+    return g_hash_table_lookup_extended (service_type->tags, tag, NULL, NULL);
+}
+
+/**
  * ag_service_type_get_tags:
  * @service_type: the #AgServiceType.
  * 
@@ -351,7 +367,8 @@ ag_service_type_unref (AgServiceType *service_type)
         g_free (service_type->display_name);
         g_free (service_type->icon_name);
         g_free (service_type->file_data);
-        g_hash_table_destroy (service_type->tags);
+        if (service_type->tags)
+            g_hash_table_destroy (service_type->tags);
         g_slice_free (AgServiceType, service_type);
     }
 }
