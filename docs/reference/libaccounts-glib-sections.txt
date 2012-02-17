@@ -144,6 +144,8 @@ ag_service_get_icon_name
 ag_service_get_name
 ag_service_get_provider
 ag_service_get_service_type
+ag_service_get_tags
+ag_service_has_tag
 ag_service_list_free
 ag_service_ref
 ag_service_unref
@@ -160,6 +162,8 @@ ag_service_type_get_file_contents
 ag_service_type_get_i18n_domain
 ag_service_type_get_icon_name
 ag_service_type_get_name
+ag_service_type_get_tags
+ag_service_type_has_tag
 ag_service_type_ref
 ag_service_type_unref
 <SUBSECTION Standard>
