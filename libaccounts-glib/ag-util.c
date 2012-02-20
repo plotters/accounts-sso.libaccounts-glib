@@ -535,6 +535,7 @@ gboolean _ag_xml_parse_element_list (xmlTextReaderPtr reader, const gchar *match
                     g_hash_table_insert (*list, data, NULL);
                     ok = TRUE;
                 }
+                else return FALSE;
             }
         }
 
