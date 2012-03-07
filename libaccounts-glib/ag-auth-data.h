@@ -42,6 +42,7 @@ GType ag_auth_data_get_type (void) G_GNUC_CONST;
 AgAuthData *ag_auth_data_ref (AgAuthData *self);
 void ag_auth_data_unref (AgAuthData *self);
 
+guint ag_auth_data_get_credentials_id (AgAuthData *self);
 const gchar *ag_auth_data_get_method (AgAuthData *self);
 const gchar *ag_auth_data_get_mechanism (AgAuthData *self);
 GHashTable *ag_auth_data_get_parameters (AgAuthData *self);

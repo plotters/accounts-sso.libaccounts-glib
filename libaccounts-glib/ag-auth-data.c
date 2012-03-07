@@ -40,6 +40,7 @@
 struct _AgAuthData {
     /*< private >*/
     gint ref_count;
+    guint credentials_id;
     gchar *method;
     gchar *mechanism;
     GHashTable *parameters;
@@ -49,6 +50,23 @@ G_DEFINE_BOXED_TYPE (AgAuthData, ag_auth_data,
                      (GBoxedCopyFunc)ag_auth_data_ref,
                      (GBoxedFreeFunc)ag_auth_data_unref);
 
+static gboolean
+get_value_with_fallback (AgAccount *account, AgService *service,
+                         const gchar *key, GValue *value)
+{
+    ag_account_select_service (account, service);
+    if (ag_account_get_value (account, key, value) == AG_SETTING_SOURCE_NONE)
+    {
+        /* fallback to the global account */
+        ag_account_select_service (account, NULL);
+        if (ag_account_get_value (account, key, value) ==
+            AG_SETTING_SOURCE_NONE)
+            return FALSE;
+    }
+
+    return TRUE;
+}
+
 static gchar *
 get_string_with_fallback (AgAccount *account, AgService *service,
                           const gchar *key)
@@ -57,19 +75,25 @@ get_string_with_fallback (AgAccount *account, AgService *service,
     gchar *ret;
 
     g_value_init(&value, G_TYPE_STRING);
-    ag_account_select_service (account, service);
-    if (ag_account_get_value (account, key, &value) == AG_SETTING_SOURCE_NONE)
-    {
-        /* fallback to the global account */
-        ag_account_select_service (account, NULL);
-        if (ag_account_get_value (account, key, &value) ==
-            AG_SETTING_SOURCE_NONE)
-            return NULL;
-    }
+    if (!get_value_with_fallback (account, service, key, &value))
+        return NULL;
 
     ret = g_value_dup_string (&value);
     g_value_unset (&value);
     return ret;
+}
+
+static guint
+get_uint_with_fallback (AgAccount *account, AgService *service,
+                        const gchar *key)
+{
+    GValue value = {0, };
+
+    g_value_init(&value, G_TYPE_UINT);
+    if (!get_value_with_fallback (account, service, key, &value))
+        return 0;
+
+    return g_value_get_uint (&value);
 }
 
 static void
@@ -90,6 +114,7 @@ read_auth_settings (AgAccount *account, const gchar *key_prefix,
 AgAuthData *
 _ag_auth_data_new (AgAccount *account, AgService *service)
 {
+    guint credentials_id;
     gchar *method, *mechanism;
     gchar *key_prefix;
     GHashTable *parameters;
@@ -97,6 +122,8 @@ _ag_auth_data_new (AgAccount *account, AgService *service)
 
     g_return_val_if_fail (account != NULL, NULL);
     g_return_val_if_fail (service != NULL, NULL);
+
+    credentials_id = get_uint_with_fallback (account, service, "CredentialsId");
 
     method = get_string_with_fallback (account, service, "auth/method");
     if (method == NULL)
@@ -125,6 +152,7 @@ _ag_auth_data_new (AgAccount *account, AgService *service)
     g_free (key_prefix);
 
     data = g_slice_new (AgAuthData);
+    data->credentials_id = credentials_id;
     data->method = method;
     data->mechanism = mechanism;
     data->parameters = parameters;
@@ -165,6 +193,21 @@ ag_auth_data_unref (AgAuthData *self)
         g_hash_table_unref (self->parameters);
         g_slice_free (AgAuthData, self);
     }
+}
+
+/**
+ * ag_auth_data_get_credentials_id:
+ * @self: the #AgAuthData.
+ *
+ * Gets the ID of the credentials associated with this account.
+ *
+ * Returns: the credentials ID.
+ */
+guint
+ag_auth_data_get_credentials_id (AgAuthData *self)
+{
+    g_return_val_if_fail (self != NULL, 0);
+    return self->credentials_id;
 }
 
 /**

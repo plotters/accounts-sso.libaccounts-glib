@@ -817,6 +817,7 @@ START_TEST(test_auth_data)
     AgAccountId account_id;
     AgAccountService *account_service;
     AgService *my_service;
+    const guint credentials_id = 0xdeadbeef;
     const gchar *method = "dummy-method";
     const gchar *mechanism = "dummy-mechanism";
     const gchar *global_params[] = {
@@ -854,6 +855,11 @@ START_TEST(test_auth_data)
     ag_account_set_enabled (account, TRUE);
     write_strings_to_account (account, key_prefix, service_params);
 
+    g_value_init (&value, G_TYPE_UINT);
+    g_value_set_uint (&value, credentials_id);
+    ag_account_set_value (account, "CredentialsId", &value);
+    g_value_unset (&value);
+
     g_value_init (&value, G_TYPE_STRING);
     g_value_set_static_string (&value, method);
     ag_account_set_value (account, "auth/method", &value);
@@ -879,6 +885,7 @@ START_TEST(test_auth_data)
     /* get the auth data and check its contents */
     data = ag_account_service_get_auth_data (account_service);
     fail_unless (data != NULL);
+    fail_unless (ag_auth_data_get_credentials_id (data) == credentials_id);
     fail_unless (strcmp (ag_auth_data_get_method (data), method) == 0);
     fail_unless (strcmp (ag_auth_data_get_mechanism (data), mechanism) == 0);
     params = ag_auth_data_get_parameters (data);

@@ -82,6 +82,7 @@ ag_account_service_get_type
 <FILE>ag-auth-data</FILE>
 <TITLE>AgAuthData</TITLE>
 AgAuthData
+ag_auth_data_get_credentials_id
 ag_auth_data_get_mechanism
 ag_auth_data_get_method
 ag_auth_data_get_parameters
