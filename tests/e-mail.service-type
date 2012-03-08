@@ -3,4 +3,8 @@
   <translations>translation_file</translations>
   <name>Electronic mail</name>
   <icon>email_icon</icon>
+  <tags>
+      <tag>e-mail</tag>
+      <tag>messaging</tag>
+  </tags>
 </service-type>

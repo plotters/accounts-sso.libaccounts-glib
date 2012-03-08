@@ -4,8 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -974,6 +976,10 @@ START_TEST(test_application)
 
     manager = ag_manager_new ();
 
+    application = ag_manager_get_application (manager, "Mailer");
+    fail_unless (application != NULL);
+    ag_application_unref (application);
+
     email_service = ag_manager_get_service (manager, "MyService");
     fail_unless (email_service != NULL);
 
@@ -1022,6 +1028,7 @@ START_TEST(test_service)
 {
     GValue value = { 0 };
     AgService *service2;
+    GList *tag_list, *list;
     AgAccountId account_id;
     const gchar *provider_name, *service_type, *service_name, *icon_name;
     const gchar *description = "This is really a beautiful account";
@@ -1077,7 +1084,20 @@ START_TEST(test_service)
     icon_name = ag_service_get_icon_name (service);
     fail_unless (g_strcmp0 (icon_name, "general_myservice") == 0,
                  "Wrong service icon name: %s", icon_name);
-
+    
+    tag_list = ag_service_get_tags (service);
+    fail_unless (tag_list != NULL);
+    for (list = tag_list; list != NULL; list = list->next)
+    {
+        g_debug(" Service tag: %s", list->data);
+        fail_unless (g_strcmp0 (list->data, "e-mail") == 0 ||
+                     g_strcmp0 (list->data, "messaging") == 0,
+                     "Wrong service tag: %s", list->data);
+    }
+    g_list_free (tag_list);
+    fail_unless (ag_service_has_tag (service, "e-mail"),
+                 "Missing service tag");
+    
     ag_account_set_enabled (account, FALSE);
     ag_account_set_display_name (account, display_name);
 
@@ -1126,6 +1146,20 @@ START_TEST(test_service)
     g_value_unset (&value);
 
     service2 = ag_manager_get_service (manager, "OtherService");
+
+    tag_list = ag_service_get_tags (service2);
+    fail_unless (tag_list != NULL);
+    for (list = tag_list; list != NULL; list = list->next)
+    {
+        g_debug(" Service tag: %s", list->data);
+        fail_unless (g_strcmp0 (list->data, "video") == 0 ||
+                     g_strcmp0 (list->data, "sharing") == 0,
+                     "Wrong service tag: %s", list->data);
+    }
+    g_list_free (tag_list);
+    fail_unless (ag_service_has_tag (service2, "sharing"),
+                 "Missing service tag");
+    
     ag_account_select_service (account, service2);
 
     g_value_init (&value, G_TYPE_STRING);
@@ -1615,6 +1649,52 @@ START_TEST(test_list_services)
     end_test ();
 }
 END_TEST
+
+START_TEST(test_list_service_types)
+{
+    GList *service_types, *list, *tags, *tag_list;
+    gint n_service_types;
+    AgServiceType *service_type;
+    const gchar *name, *tag;
+
+    g_type_init ();
+    manager = ag_manager_new ();
+
+    service_types = ag_manager_list_service_types (manager);
+
+    n_service_types = g_list_length (service_types);
+    fail_unless (n_service_types == 1,
+                 "Got %d service types, expecting 1",
+                 n_service_types);
+
+    for (list = service_types; list != NULL; list = list->next)
+    {
+        service_type = list->data;
+
+        name = ag_service_type_get_name (service_type);
+        g_debug ("Service type name: %s", name);
+        fail_unless (g_strcmp0 (name, "e-mail") == 0,
+                     "Got unexpected service type `%s'", name);
+        
+        tags = ag_service_type_get_tags (service_type);
+        for (tag_list = tags; tag_list != NULL; tag_list = tag_list->next)
+        {
+            tag = (gchar *) tag_list->data;
+            g_debug (" Service type tag: %s", tag);
+            fail_unless ((g_strcmp0 (tag, "e-mail") == 0 ||
+                          g_strcmp0 (tag, "messaging") == 0),
+                         "Got unexpected service type tag `%s'", tag);
+        }
+        g_list_free (tags);
+        fail_unless (ag_service_type_has_tag (service_type, "messaging"),
+                     "Missing service type tag");
+    }
+    ag_service_type_list_free (service_types);
+
+    end_test ();
+}
+END_TEST
+
 
 START_TEST(test_delete)
 {
@@ -2993,6 +3073,7 @@ ag_suite(const char *test_case)
     tcase_add_test (tc, test_list_enabled_account);
     tcase_add_test (tc, test_list_services);
     tcase_add_test (tc, test_account_list_enabled_services);
+    tcase_add_test (tc, test_list_service_types);
     IF_TEST_CASE_ENABLED("List")
         suite_add_tcase (s, tc);
 

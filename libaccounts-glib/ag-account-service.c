@@ -486,7 +486,7 @@ ag_account_service_settings_iter_init (AgAccountService *self,
  *
  * Creates a new iterator. This method is useful for language bindings only.
  *
- * Returns: (transfer full): an #AgAccountSettingsIter.
+ * Returns: (transfer full): an #AgAccountSettingIter.
  */
 AgAccountSettingIter *
 ag_account_service_get_settings_iter (AgAccountService *self,

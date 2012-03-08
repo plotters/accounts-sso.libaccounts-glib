@@ -4,8 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -36,6 +38,7 @@
 #include "config.h"
 #include "ag-service.h"
 
+#include "ag-service-type.h"
 #include "ag-internals.h"
 #include "ag-util.h"
 #include <libxml/xmlreader.h>
@@ -155,6 +158,11 @@ parse_service (xmlTextReaderPtr reader, AgService *service)
                  * interested in: we can stop the parsing now */
                 return TRUE;
             }
+            else if (strcmp (name, "tags") == 0)
+            {
+                ok = _ag_xml_parse_element_list (reader, "tag",
+                                                 &service->tags);
+            }
             else
                 ok = TRUE;
 
@@ -185,6 +193,24 @@ read_service_file (xmlTextReaderPtr reader, AgService *service)
         ret = xmlTextReaderNext (reader);
     }
     return FALSE;
+}
+
+static void
+copy_tags_from_type (AgService *service)
+{
+    AgServiceType *type;
+    GList *type_tags, *tag_list;
+    
+    service->tags = g_hash_table_new_full (g_str_hash, g_str_equal,
+                                           g_free, NULL);
+    type = _ag_service_type_new_from_file (service->type);
+    g_return_if_fail (type != NULL);
+    type_tags = ag_service_type_get_tags (type);
+    for (tag_list = type_tags; tag_list != NULL; tag_list = tag_list->next)
+        g_hash_table_insert (service->tags,
+                             g_strdup (tag_list->data), NULL);
+    g_list_free (type_tags);
+    ag_service_type_unref (type);
 }
 
 AgService *
@@ -409,6 +435,46 @@ ag_service_get_i18n_domain (AgService *service)
 }
 
 /**
+ * ag_service_has_tag:
+ * @service: the #AgService.
+ * @tag: tag to check for
+ * 
+ * Checks if the #AgService has the requested tag.
+ * 
+ * Returns: TRUE in #AgService has the tag, FALSE otherwise
+ */
+gboolean ag_service_has_tag (AgService *service, const gchar *tag)
+{
+    g_return_val_if_fail (service != NULL, FALSE);
+    
+    if (service->tags == NULL)
+        copy_tags_from_type (service);
+
+    return g_hash_table_lookup_extended (service->tags, tag, NULL, NULL);
+}
+
+/**
+ * ag_service_get_tags:
+ * @service: the #AgService.
+ * 
+ * Get list of tags specified for the #AgService. If the service has not
+ * defined tags, tags from the service type will be returned.
+ * 
+ * Returns: (transfer container) (element-type string): #Glist of tags for @service.
+ * List must be freed with g_list_free(). Entries are owned by the #AgService type,
+ * do not free.
+ */
+GList *ag_service_get_tags (AgService *service)
+{
+    g_return_val_if_fail (service != NULL, NULL);
+
+    if (service->tags == NULL)
+        copy_tags_from_type (service);
+
+    return g_hash_table_get_keys (service->tags);
+}
+
+/**
  * ag_service_get_file_contents:
  * @service: the #AgService.
  * @contents: location to receive the pointer to the file contents.
@@ -490,6 +556,8 @@ ag_service_unref (AgService *service)
         g_free (service->file_data);
         if (service->default_settings)
             g_hash_table_unref (service->default_settings);
+        if (service->tags)
+            g_hash_table_destroy (service->tags);
         g_slice_free (AgService, service);
     }
 }

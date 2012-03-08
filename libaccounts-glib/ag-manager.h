@@ -4,8 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -116,9 +118,12 @@ guint ag_manager_get_db_timeout (AgManager *manager);
 void ag_manager_set_abort_on_db_timeout (AgManager *manager, gboolean abort);
 gboolean ag_manager_get_abort_on_db_timeout (AgManager *manager);
 
+GList *ag_manager_list_service_types (AgManager *manager);
 AgServiceType *ag_manager_load_service_type (AgManager *manager,
                                              const gchar *service_type);
 
+AgApplication *ag_manager_get_application (AgManager *self,
+                                           const gchar *application_name);
 GList *ag_manager_list_applications_by_service (AgManager *manager,
                                                 AgService *service);
 

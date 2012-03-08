@@ -4,8 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2010 Nokia Corporation.
+ * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -43,11 +45,15 @@ const gchar *ag_service_type_get_name (AgServiceType *service_type);
 const gchar *ag_service_type_get_i18n_domain (AgServiceType *service_type);
 const gchar *ag_service_type_get_display_name (AgServiceType *service_type);
 const gchar *ag_service_type_get_icon_name (AgServiceType *service_type);
+gboolean ag_service_type_has_tag (AgServiceType *service_type,
+                                  const gchar *tag);
+GList *ag_service_type_get_tags (AgServiceType *service_type);
 void ag_service_type_get_file_contents (AgServiceType *service_type,
                                         const gchar **contents,
                                         gsize *len);
 AgServiceType *ag_service_type_ref (AgServiceType *service_type);
 void ag_service_type_unref (AgServiceType *service_type);
+void ag_service_type_list_free (GList *list);
 
 G_END_DECLS
 

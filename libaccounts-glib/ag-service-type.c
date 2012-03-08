@@ -4,8 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2010 Nokia Corporation.
+ * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -51,6 +53,7 @@ struct _AgServiceType {
     gchar *icon_name;
     gchar *file_data;
     gsize file_data_len;
+    GHashTable *tags;
 };
 
 G_DEFINE_BOXED_TYPE (AgServiceType, ag_service_type,
@@ -100,6 +103,11 @@ parse_service_type (xmlTextReaderPtr reader, AgServiceType *service_type)
             {
                 ok = _ag_xml_dup_element_data (reader,
                                                &service_type->i18n_domain);
+            }
+            else if (strcmp (name, "tags") == 0)
+            {
+                ok = _ag_xml_parse_element_list (reader, "tag",
+                                                 &service_type->tags);
             }
             else
                 ok = TRUE;
@@ -262,6 +270,38 @@ ag_service_type_get_icon_name (AgServiceType *service_type)
 }
 
 /**
+ * ag_service_type_has_tag:
+ * @service_type: the #AgServiceType
+ * @tag: the tag to check for
+ * 
+ * Check if the #AgServiceType has the requested tag.
+ * 
+ * Returns: TRUE if th #AgServiceType has the tag, FALSE otherwise
+ */
+gboolean ag_service_type_has_tag (AgServiceType *service_type,
+                                  const gchar *tag)
+{
+    g_return_val_if_fail (service_type != NULL, FALSE);
+    return g_hash_table_lookup_extended (service_type->tags, tag, NULL, NULL);
+}
+
+/**
+ * ag_service_type_get_tags:
+ * @service_type: the #AgServiceType.
+ * 
+ * Get list of tags specified for the #AgServiceType.
+ * 
+ * Returns: (transfer container) (element-type string): #Glist of tags for @service_type.
+ * List must be freed with g_list_free(). Entries are owned by the #AgServiceType type,
+ * do not free.
+ */
+GList *ag_service_type_get_tags (AgServiceType *service_type)
+{
+    g_return_val_if_fail (service_type != NULL, NULL);
+    return g_hash_table_get_keys (service_type->tags);
+}
+
+/**
  * ag_service_type_get_file_contents:
  * @service_type: the #AgServiceType.
  * @contents: location to receive the pointer to the file contents.
@@ -327,7 +367,22 @@ ag_service_type_unref (AgServiceType *service_type)
         g_free (service_type->display_name);
         g_free (service_type->icon_name);
         g_free (service_type->file_data);
+        if (service_type->tags)
+            g_hash_table_destroy (service_type->tags);
         g_slice_free (AgServiceType, service_type);
     }
 }
 
+/**
+ * ag_service_type_list_free:
+ * @list: (element-type AgServiceType): a #GList of service types returned by some
+ * function of this library.
+ *
+ * Frees the list @list.
+ */
+void
+ag_service_type_list_free (GList *list)
+{
+    g_list_foreach (list, (GFunc)ag_service_type_unref, NULL);
+    g_list_free (list);
+}

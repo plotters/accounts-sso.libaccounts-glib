@@ -4,8 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -502,6 +504,44 @@ _ag_xml_parse_settings (xmlTextReaderPtr reader, const gchar *group,
         ret = xmlTextReaderNext (reader);
     }
     return TRUE;
+}
+
+gboolean _ag_xml_parse_element_list (xmlTextReaderPtr reader, const gchar *match,
+                                     GHashTable **list)
+{
+    gboolean ok = FALSE;
+    const gchar *ename;
+    gchar *data;
+    int res, etype;
+
+    *list = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
+
+    res = xmlTextReaderRead (reader);
+    while (res == 1)
+    {
+        ename = (const gchar *) xmlTextReaderConstName (reader);
+        if (G_UNLIKELY (!ename)) return FALSE;
+
+        etype = xmlTextReaderNodeType (reader);
+        if (etype == XML_READER_TYPE_END_ELEMENT)
+            break;
+
+        if (etype == XML_READER_TYPE_ELEMENT)
+        {
+            if (strcmp (ename, match) == 0)
+            {
+                if (_ag_xml_dup_element_data (reader, &data))
+                {
+                    g_hash_table_insert (*list, data, NULL);
+                    ok = TRUE;
+                }
+                else return FALSE;
+            }
+        }
+
+        res = xmlTextReaderNext (reader);
+    }
+    return ok;
 }
 
 static inline gboolean

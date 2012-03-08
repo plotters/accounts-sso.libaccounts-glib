@@ -53,7 +53,6 @@ ag_account_settings_iter_get_type
 <FILE>ag-account-service</FILE>
 <TITLE>AgAccountService</TITLE>
 AgAccountService
-AgAccountServiceNotifyCb
 ag_account_service_get_account
 ag_account_service_get_changed_fields
 ag_account_service_get_enabled
@@ -94,6 +93,21 @@ ag_auth_data_get_type
 </SECTION>
 
 <SECTION>
+<FILE>ag-application</FILE>
+<TITLE>AgApplication</TITLE>
+AgApplication
+ag_application_get_description
+ag_application_get_desktop_app_info
+ag_application_get_i18n_domain
+ag_application_get_name
+ag_application_get_service_usage
+ag_application_ref
+ag_application_unref
+<SUBSECTION Standard>
+ag_application_get_type
+</SECTION>
+
+<SECTION>
 <FILE>ag-manager</FILE>
 <TITLE>AgManager</TITLE>
 AgManager
@@ -101,17 +115,20 @@ ag_manager_create_account
 ag_manager_get_abort_on_db_timeout
 ag_manager_get_account
 ag_manager_get_account_services
+ag_manager_get_application
 ag_manager_get_db_timeout
 ag_manager_get_enabled_account_services
 ag_manager_get_provider
 ag_manager_get_service
 ag_manager_get_service_type
 ag_manager_list
+ag_manager_list_applications_by_service
 ag_manager_list_by_service_type
 ag_manager_list_enabled
 ag_manager_list_enabled_by_service_type
 ag_manager_list_free
 ag_manager_list_providers
+ag_manager_list_service_types
 ag_manager_list_services
 ag_manager_list_services_by_type
 ag_manager_load_account
@@ -160,6 +177,8 @@ ag_service_get_icon_name
 ag_service_get_name
 ag_service_get_provider
 ag_service_get_service_type
+ag_service_get_tags
+ag_service_has_tag
 ag_service_list_free
 ag_service_ref
 ag_service_unref
@@ -176,6 +195,9 @@ ag_service_type_get_file_contents
 ag_service_type_get_i18n_domain
 ag_service_type_get_icon_name
 ag_service_type_get_name
+ag_service_type_get_tags
+ag_service_type_has_tag
+ag_service_type_list_free
 ag_service_type_ref
 ag_service_type_unref
 <SUBSECTION Standard>
