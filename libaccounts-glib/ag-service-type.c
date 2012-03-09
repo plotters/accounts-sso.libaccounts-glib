@@ -271,12 +271,12 @@ ag_service_type_get_icon_name (AgServiceType *service_type)
 
 /**
  * ag_service_type_has_tag:
- * @service_type: the #AgServiceType
- * @tag: the tag to check for
- * 
+ * @service_type: the #AgServiceType.
+ * @tag: the tag to check for.
+ *
  * Check if the #AgServiceType has the requested tag.
- * 
- * Returns: TRUE if th #AgServiceType has the tag, FALSE otherwise
+ *
+ * Returns: TRUE if the #AgServiceType has the tag, FALSE otherwise
  */
 gboolean ag_service_type_has_tag (AgServiceType *service_type,
                                   const gchar *tag)
@@ -288,12 +288,13 @@ gboolean ag_service_type_has_tag (AgServiceType *service_type,
 /**
  * ag_service_type_get_tags:
  * @service_type: the #AgServiceType.
- * 
+ *
  * Get list of tags specified for the #AgServiceType.
- * 
- * Returns: (transfer container) (element-type string): #Glist of tags for @service_type.
- * List must be freed with g_list_free(). Entries are owned by the #AgServiceType type,
- * do not free.
+ *
+ * Returns: (transfer container) (element-type utf8): #GList of tags for
+ * @service_type.
+ * The list must be freed with g_list_free(). Entries are owned by the
+ * #AgServiceType type and must not be free'd.
  */
 GList *ag_service_type_get_tags (AgServiceType *service_type)
 {

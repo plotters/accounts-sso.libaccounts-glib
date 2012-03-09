@@ -32,10 +32,10 @@ AC_PROG_LIBTOOL
 
 GTK_DOC_CHECK([1.14], [--flavour no-tmpl])
 
-DATABASE_DIR=".accounts"
+DATABASE_DIR="libaccounts-glib"
 AC_SUBST(DATABASE_DIR)
 AC_DEFINE_UNQUOTED(DATABASE_DIR, "$DATABASE_DIR",
-		   [Directory for storing database])
+		   [Directory for storing database (in $XDG_CONFIG_HOME)])
 
 APPLICATION_FILES_DIR="accounts/applications"
 AC_SUBST(APPLICATION_FILES_DIR)
@@ -82,10 +82,6 @@ if test "x$coverage" = "xyes"; then
     CFLAGS="$CFLAGS -g -fprofile-arcs -ftest-coverage"
 fi
 
-testdatadir=${datadir}/libaccounts-glib0-test
-AC_SUBST(testdatadir)
-
-
 # Python support
 
 AM_PATH_PYTHON
@@ -110,9 +106,6 @@ if test "x$enable_python" = "xyes"; then
 fi
 
 AM_CONDITIONAL(ENABLE_PYTHON, test x"$enable_python" = "xyes")
-
-
-AC_CONFIG_FILES([tests/accounts-glib-test.sh], [chmod +x tests/accounts-glib-test.sh])
 
 AC_OUTPUT([
 	Makefile

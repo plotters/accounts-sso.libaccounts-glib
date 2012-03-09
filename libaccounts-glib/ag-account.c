@@ -770,6 +770,23 @@ ag_account_constructor (GType type, guint n_params,
 }
 
 static void
+ag_account_get_property (GObject *object, guint property_id,
+                         GValue *value, GParamSpec *pspec)
+{
+    AgAccount *account = AG_ACCOUNT (object);
+
+    switch (property_id)
+    {
+    case PROP_ID:
+        g_value_set_uint (value, account->id);
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+        break;
+    }
+}
+
+static void
 ag_account_set_property (GObject *object, guint property_id,
                          const GValue *value, GParamSpec *pspec)
 {
@@ -856,16 +873,23 @@ ag_account_class_init (AgAccountClass *klass)
     g_type_class_add_private (object_class, sizeof (AgAccountPrivate));
 
     object_class->constructor = ag_account_constructor;
+    object_class->get_property = ag_account_get_property;
     object_class->set_property = ag_account_set_property;
     object_class->dispose = ag_account_dispose;
     object_class->finalize = ag_account_finalize;
 
+    /**
+     * AgAccount:id:
+     *
+     * The AgAccountId for the account.
+     */
     g_object_class_install_property
         (object_class, PROP_ID,
-         g_param_spec_uint ("id", "id", "id",
+         g_param_spec_uint ("id", "Account ID",
+                            "The AgAccountId of the account",
                             0, G_MAXUINT, 0,
                             G_PARAM_STATIC_STRINGS |
-                            G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
     g_object_class_install_property
         (object_class, PROP_MANAGER,

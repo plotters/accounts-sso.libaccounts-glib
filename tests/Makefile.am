@@ -2,10 +2,9 @@
 
 INCLUDES=-I$(top_srcdir) $(LIBACCOUNTS_CFLAGS)
 
-bin_PROGRAMS = accounts-glib-testsuite test-process 
+check_PROGRAMS = accounts-glib-testsuite test-process 
 
-bin_SCRIPTS = accounts-glib-test.sh
-CLEANFILES = $(bin_SCRIPTS)
+check_SCRIPTS = accounts-glib-test.sh
 
 accounts_glib_testsuite_SOURCES = check_ag.c
 accounts_glib_testsuite_CFLAGS = $(CHECK_FLAGS) -I$(top_srcdir)
@@ -21,25 +20,9 @@ test_process_LDADD = \
 	$(top_builddir)/libaccounts-glib/libaccounts-glib.la
 
 TESTS_ENVIRONMENT = \
-	ACCOUNTS=/tmp/ \
-	AG_APPLICATIONS=$(top_srcdir)/tests/ \
-	AG_SERVICES=$(top_srcdir)/tests/ \
-	AG_SERVICE_TYPES=$(top_srcdir)/tests/ \
-	AG_PROVIDERS=$(top_srcdir)/tests/ \
-	AG_DEBUG=all \
-	G_MESSAGES_DEBUG=all
+	TESTDATADIR=$(top_srcdir)/tests/
 
-TESTS = accounts-glib-testsuite
-
-testdata_DATA = \
-	tests.xml \
-	e-mail.service-type \
-	Gallery.application \
-	Mailer.application \
-	MyProvider.provider \
-	MyService.service \
-	MyService2.service \
-	OtherService.service
+TESTS = accounts-glib-test.sh
 
 EXTRA_DIST = \
 	tests.xml \

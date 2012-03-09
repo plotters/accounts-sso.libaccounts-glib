@@ -46,7 +46,7 @@
 #include <unistd.h>
 
 #ifndef DATABASE_DIR
-#define DATABASE_DIR ".accounts"
+#define DATABASE_DIR "libaccounts-glib"
 #endif
 
 enum
@@ -1174,7 +1174,7 @@ open_db (AgManager *manager)
     basedir = g_getenv ("ACCOUNTS");
     if (G_LIKELY (!basedir))
     {
-        basedir = g_get_home_dir ();
+        basedir = g_get_user_config_dir ();
         pathname = g_build_path (G_DIR_SEPARATOR_S, basedir,
             DATABASE_DIR, NULL);
         if (G_UNLIKELY (g_mkdir_with_parents(pathname, 0755)))

@@ -22,6 +22,8 @@
  * 02110-1301 USA
  */
 
+#include <config.h>
+
 #include <glib.h>
 #include <sched.h>
 #include <sqlite3.h>
@@ -34,8 +36,8 @@ show_help ()
 {
     printf ("\nUsage:\n"
             "   %1$s\n"
-            "Backups the accounts from ~/.accounts/accounts.db into\n"
-            "~/.accounts/accounts.db.bak\n\n",
+            "Backups the accounts from ~/.config/libaccounts-glib/accounts.db\n"
+            "into ~/.config/libaccounts-glib/accounts.db.bak\n\n",
             g_get_prgname());
 }
 
@@ -83,8 +85,8 @@ backup ()
     int ret;
     gboolean success = FALSE;;
 
-    filename = g_build_filename (g_get_home_dir (),
-                                 ".accounts",
+    filename = g_build_filename (g_get_user_config_dir (),
+                                 DATABASE_DIR,
                                  "accounts.db",
                                  NULL);
     filename_bak = g_strdup_printf ("%s.bak", filename);

@@ -437,16 +437,16 @@ ag_service_get_i18n_domain (AgService *service)
 /**
  * ag_service_has_tag:
  * @service: the #AgService.
- * @tag: tag to check for
- * 
+ * @tag: tag to check for.
+ *
  * Checks if the #AgService has the requested tag.
- * 
- * Returns: TRUE in #AgService has the tag, FALSE otherwise
+ *
+ * Returns: TRUE if #AgService has the tag, FALSE otherwise
  */
 gboolean ag_service_has_tag (AgService *service, const gchar *tag)
 {
     g_return_val_if_fail (service != NULL, FALSE);
-    
+
     if (service->tags == NULL)
         copy_tags_from_type (service);
 
@@ -456,13 +456,13 @@ gboolean ag_service_has_tag (AgService *service, const gchar *tag)
 /**
  * ag_service_get_tags:
  * @service: the #AgService.
- * 
+ *
  * Get list of tags specified for the #AgService. If the service has not
  * defined tags, tags from the service type will be returned.
- * 
- * Returns: (transfer container) (element-type string): #Glist of tags for @service.
- * List must be freed with g_list_free(). Entries are owned by the #AgService type,
- * do not free.
+ *
+ * Returns: (transfer container) (element-type utf8): #GList of tags for
+ * @service. The list must be freed with g_list_free(). Entries are owned by
+ * the #AgService type and must not be free'd.
  */
 GList *ag_service_get_tags (AgService *service)
 {
