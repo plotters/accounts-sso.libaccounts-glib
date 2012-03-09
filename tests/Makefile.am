@@ -25,6 +25,7 @@ TESTS_ENVIRONMENT = \
 TESTS = accounts-glib-test.sh
 
 EXTRA_DIST = \
+	accounts-glib-test.sh \
 	tests.xml \
 	e-mail.service-type \
 	Gallery.application \
