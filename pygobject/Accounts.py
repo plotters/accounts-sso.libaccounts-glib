@@ -35,13 +35,34 @@ class Account(Accounts.Account):
     get_int = _get_int
     get_bool = _get_bool
 
+    def __eq__(self, other):
+        return self.id == other.id
+    def __ne__(self, other):
+        return self.id != other.id
+
 Account = override(Account)
 __all__.append('Account')
+
+class Service(Accounts.Service):
+    def __eq__(self, other):
+        return self.get_name() == other.get_name()
+    def __ne__(self, other):
+        return self.get_name() != other.get_name()
+
+Service = override(Service)
+__all__.append('Service')
 
 class AccountService(Accounts.AccountService):
     get_string = _get_string
     get_int = _get_int
     get_bool = _get_bool
+
+    def __eq__(self, other):
+        return self.get_account() == other.get_account() and \
+            self.get_service() == other.get_service()
+    def __ne__(self, other):
+        return self.get_account() != other.get_account() or \
+            self.get_service() != other.get_service()
 
 AccountService = override(AccountService)
 __all__.append('AccountService')
