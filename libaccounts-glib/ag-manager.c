@@ -29,7 +29,19 @@
  * @short_description: The account manager object
  * @include: libaccounts-glib/ag-manager.h
  *
- * The #AgManager is the main object in this library.
+ * The #AgManager is the main object in this library. Use it to create an
+ * #AgAccount, and to instantiate boxed types such as #AgProvider,
+ * #AgApplication and #AgService.
+ *
+ * #AgManager can be instantiated with a set service type with
+ * ag_manager_new_for_service_type(), which restricts some future operations on
+ * the manager, such as ag_manager_list() or ag_manager_list_services(), to
+ * only affect accounts or services with the set service type.
+ *
+ * Lists of objects instantiated by the manager can be freed with the
+ * corresponding functions, such as ag_manager_list_free() for the #GList of
+ * #AgAccountId returned from ag_manager_list(), or ag_service_list_free() for
+ * the #GList of #AgService returned from ag_manager_list_services().
  */
 
 #include "config.h"
@@ -1344,6 +1356,24 @@ ag_manager_constructor (GType type, guint n_params,
 }
 
 static void
+ag_manager_get_property (GObject *object, guint property_id,
+                         GValue *value, GParamSpec *pspec)
+{
+    AgManager *manager = AG_MANAGER (object);
+    AgManagerPrivate *priv = manager->priv;
+
+    switch (property_id)
+    {
+    case PROP_SERVICE_TYPE:
+        g_value_set_string (value, priv->service_type);
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+        break;
+    }
+}
+
+static void
 ag_manager_set_property (GObject *object, guint property_id,
                          const GValue *value, GParamSpec *pspec)
 {
@@ -1457,14 +1487,22 @@ ag_manager_class_init (AgManagerClass *klass)
     klass->account_deleted = ag_manager_account_deleted;
     object_class->constructor = ag_manager_constructor;
     object_class->dispose = ag_manager_dispose;
+    object_class->get_property = ag_manager_get_property;
     object_class->set_property = ag_manager_set_property;
     object_class->finalize = ag_manager_finalize;
 
+    /**
+     * AgManager:service-type:
+     *
+     * If the service type is set, certain operations on the #AgManager, such
+     * as ag_manager_list() and ag_manager_list_services(), will be restricted
+     * to only affect accounts or services with that service type.
+     */
     g_object_class_install_property
         (object_class, PROP_SERVICE_TYPE,
          g_param_spec_string ("service-type", "service type", "Set service type",
                               NULL,
-                              G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+                              G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
 
     /**
      * AgManager::account-created:
@@ -1489,13 +1527,14 @@ ag_manager_class_init (AgManagerClass *klass)
      * @manager: the #AgManager.
      * @account_id: the #AgAccountId of the account that has been enabled.
      *
-     * If the manager has been created with ag_manager_new_for_service_type(), this
-     * signal will be emitted when an account (identified by @account_id) has been
-     * modified in such a way that the application might be interested to start/stop
-     * using it: the "enabled" flag on the account or in some service supported by the
-     * account and matching the #AgManager:service-type have changed.
-     * In practice, this signal might be emitted more often than when strictly needed;
-     * applications must call ag_account_list_enabled_services() or
+     * If the manager has been created with ag_manager_new_for_service_type(),
+     * this signal will be emitted when an account (identified by @account_id)
+     * has been modified in such a way that the application might be interested
+     * to start or stop using it: the "enabled" flag on the account or in some
+     * service supported by the account and matching the
+     * #AgManager:service-type have changed.
+     * In practice, this signal might be emitted more often than when strictly
+     * needed; applications must call ag_account_list_enabled_services() or
      * ag_manager_list_enabled() to get the current state.
      */
     signals[ACCOUNT_ENABLED] = g_signal_new ("enabled-event",
@@ -1513,8 +1552,8 @@ ag_manager_class_init (AgManagerClass *klass)
      * @account_id: the #AgAccountId of the account that has been deleted.
      *
      * Emitted when an account has been deleted.
-     * This signal is redundant with AgAccount::deleted, but it's convenient to
-     * provide full change notification to #AgManager.
+     * This signal is redundant with #AgAccount::deleted, but it is convenient
+     * to provide full change notification with #AgManager.
      */
     signals[ACCOUNT_DELETED] = g_signal_new ("account-deleted",
         G_TYPE_FROM_CLASS (klass),
@@ -1531,8 +1570,8 @@ ag_manager_class_init (AgManagerClass *klass)
      * @account_id: the #AgAccountId of the account that has been update.
      *
      * Emitted when particular service of an account has been updated.
-     * This signal is redundant with AgAccount::deleted, but it's convenient to
-     * provide full change notification to #AgManager.
+     * This signal is redundant with #AgAccount::deleted, but it is convenient
+     * to provide full change notification with #AgManager.
      */
     signals[ACCOUNT_UPDATED] = g_signal_new ("account-updated",
          G_TYPE_FROM_CLASS (klass),
@@ -1597,12 +1636,13 @@ _ag_manager_get_last_error (AgManager *manager)
  * ag_manager_list:
  * @manager: the #AgManager.
  *
- * Lists the accounts. If the #AgManager is created with specified service_type
- * it will return only the accounts supporting this service_type.
+ * Lists the accounts. If the #AgManager is created with a specified
+ * #AgManager:service-type, it will return only the accounts supporting this
+ * service type.
  *
  * Returns: (transfer full) (element-type AgAccountId): a #GList of
  * #AgAccountId representing the accounts. Must be free'd with
- * ag_manager_list_free().
+ * ag_manager_list_free() when no longer required.
  */
 GList *
 ag_manager_list (AgManager *manager)
@@ -1627,7 +1667,7 @@ ag_manager_list (AgManager *manager)
  *
  * Returns: (transfer full) (element-type AgAccountId): a #GList of
  * #AgAccountId representing the accounts. Must be free'd with
- * ag_manager_list_free().
+ * ag_manager_list_free() when no longer required.
  */
 GList *
 ag_manager_list_by_service_type (AgManager *manager,
@@ -1655,7 +1695,7 @@ ag_manager_list_by_service_type (AgManager *manager,
  *
  * Returns: (transfer full) (element-type AgAccountId): a #GList of the enabled
  * #AgAccountId representing the accounts. Must be free'd with
- * ag_manager_list_free().
+ * ag_manager_list_free() when no longer required.
  */
 GList *
 ag_manager_list_enabled (AgManager *manager)
@@ -1690,7 +1730,7 @@ ag_manager_list_enabled (AgManager *manager)
  *
  * Returns: (transfer full) (element-type AgAccountId): a #GList of the enabled
  * #AgAccountId representing the accounts. Must be free'd with
- * ag_manager_list_free().
+ * ag_manager_list_free() when no longer required.
  */
 GList *
 ag_manager_list_enabled_by_service_type (AgManager *manager,
@@ -1715,10 +1755,12 @@ ag_manager_list_enabled_by_service_type (AgManager *manager,
 
 /**
  * ag_manager_list_free:
- * @list: (element-type AgAccountId): a #GList returned from some #AgManager
- * method.
+ * @list: (element-type AgAccountId): a #GList returned from a #AgManager
+ * method which returns account IDs.
  *
- * Frees the memory taken by a #GList allocated by #AgManager.
+ * Frees the memory taken by a #GList of #AgAccountId allocated by #AgManager,
+ * such as by ag_manager_list(), ag_manager_list_enabled() or
+ * ag_manager_list_enabled_by_service_type().
  */
 void
 ag_manager_list_free (GList *list)
@@ -1744,7 +1786,7 @@ ag_manager_list_free (GList *list)
  *
  * Returns: (transfer full) (element-type AgAccountService): a list of
  * #AgAccountService objects. When done with it, call g_object_unref() on the
- * list elements.
+ * list elements, and g_list_free() on the container.
  */
 GList *
 ag_manager_get_enabled_account_services (AgManager *manager)
@@ -1779,7 +1821,7 @@ ag_manager_get_enabled_account_services (AgManager *manager)
  *
  * Returns: (transfer full) (element-type AgAccountService): a list of
  * #AgAccountService objects. When done with it, call g_object_unref() on the
- * list elements.
+ * list elements, and g_list_free() on the container.
  */
 GList *
 ag_manager_get_account_services (AgManager *manager)
@@ -1805,7 +1847,7 @@ ag_manager_get_account_services (AgManager *manager)
  * @account_id.
  *
  * Returns: (transfer full): an #AgAccount, on which the client must call
- * g_object_unref() when it's done with it, or %NULL if an error occurs.
+ * g_object_unref() when it is no longer required, or %NULL if an error occurs.
  */
 AgAccount *
 ag_manager_get_account (AgManager *manager, AgAccountId account_id)
@@ -1823,7 +1865,7 @@ ag_manager_get_account (AgManager *manager, AgAccountId account_id)
  * @account_id.
  *
  * Returns: (transfer full): an #AgAccount, on which the client must call
- * g_object_unref() when it's done with it, or %NULL if an error occurs.
+ * g_object_unref() when it is no longer required, or %NULL if an error occurs.
  */
 AgAccount *
 ag_manager_load_account (AgManager *manager, AgAccountId account_id,
@@ -1869,10 +1911,10 @@ ag_manager_load_account (AgManager *manager, AgAccountId account_id,
  *
  * Create a new account. The account is not stored in the database until
  * ag_account_store() has successfully returned; the @id field in the
- * #AgAccount structure is also not meant to be valid till the account has been
- * stored.
+ * #AgAccount structure is also not meant to be valid until the account has
+ * been stored.
  *
- * Returns: (transfer full): a new #AgAccount.
+ * Returns: (transfer full): a new #AgAccount, or %NULL.
  */
 AgAccount *
 ag_manager_create_account (AgManager *manager, const gchar *provider_name)
@@ -1922,7 +1964,8 @@ _ag_manager_get_service_lazy (AgManager *manager, const gchar *service_name,
  *
  * Loads the service identified by @service_name.
  *
- * Returns: an #AgService, which must be then free'd with ag_service_unref().
+ * Returns: an #AgService, which must be free'd with ag_service_unref() when no
+ * longer required.
  */
 AgService *
 ag_manager_get_service (AgManager *manager, const gchar *service_name)
@@ -2005,11 +2048,11 @@ _ag_manager_get_service_id (AgManager *manager, AgService *service)
  * @manager: the #AgManager.
  *
  * Gets a list of all the installed services.
- * If the #AgManager is created with specified service_type
- * it will return only the installed services supporting this service_type.
+ * If the #AgManager was created with a specified #AgManager:service_type
+ * it will return only the installed services supporting that service type.
  *
  * Returns: (transfer full) (element-type AgService): a list of #AgService,
- * which must be then free'd with ag_service_list_free().
+ * which must be free'd with ag_service_list_free() when no longer required.
  */
 GList *
 ag_manager_list_services (AgManager *manager)
@@ -2030,10 +2073,11 @@ ag_manager_list_services (AgManager *manager)
  * @manager: the #AgManager.
  * @service_type: the type of the service.
  *
- * Gets a list of all the installed services of type @service_type.
+ * Gets a list of all the installed services where the service type name is
+ * @service_type.
  *
  * Returns: (transfer full) (element-type AgService): a list of #AgService,
- * which must be then free'd with ag_service_list_free().
+ * which must be free'd with ag_service_list_free() when no longer required.
  */
 GList *
 ag_manager_list_services_by_type (AgManager *manager, const gchar *service_type)
@@ -2253,7 +2297,8 @@ _ag_manager_exec_query (AgManager *manager,
  *
  * Loads the provider identified by @provider_name.
  *
- * Returns: an #AgProvider, which must be then free'd with ag_provider_unref().
+ * Returns: an #AgProvider, which must be free'd with ag_provider_unref() when
+ * no longer required.
  */
 AgProvider *
 ag_manager_get_provider (AgManager *manager, const gchar *provider_name)
@@ -2287,9 +2332,9 @@ ag_manager_list_providers (AgManager *manager)
  * ag_manager_new_for_service_type:
  * @service_type: the name of a service type
  *
- * Create a new #AgManager with the @service_type service type.
+ * Create a new #AgManager with the service type with the name @service_type.
  *
- * Returns: an instance of an #AgManager with specified service type.
+ * Returns: an #AgManager instance with the specified service type.
  */
 AgManager *
 ag_manager_new_for_service_type (const gchar *service_type)
@@ -2390,8 +2435,9 @@ ag_manager_get_abort_on_db_timeout (AgManager *manager)
  *
  * Gets a list of all the installed service types.
  *
- * Returns: (transfer full) (element-type AgServiceType): a list of #AgServiceType,
- * which must be then free'd with ag_service_type_list_free().
+ * Returns: (transfer full) (element-type AgServiceType): a list of
+ * #AgServiceType, which must be free'd with ag_service_type_list_free() when
+ * no longer required.
  */
 GList *
 ag_manager_list_service_types (AgManager *manager)
@@ -2405,10 +2451,10 @@ ag_manager_list_service_types (AgManager *manager)
  * @manager: the #AgManager.
  * @service_type: the name of the service type.
  *
- * Instantiate the service type @service_type.
+ * Instantiate the service type with the name @service_type.
  *
- * Returns: (transfer full): an #AgServiceType, which must be then free'd with
- * ag_service_type_unref().
+ * Returns: (transfer full): an #AgServiceType, which must be free'd with
+ * ag_service_type_unref() when no longer required.
  */
 AgServiceType *
 ag_manager_load_service_type (AgManager *manager, const gchar *service_type)
@@ -2425,9 +2471,9 @@ ag_manager_load_service_type (AgManager *manager, const gchar *service_type)
 /**
  * ag_manager_list_applications_by_service:
  * @manager: the #AgManager.
- * @service: the service for which we want to get the applications list.
+ * @service: the #AgService for which we want to get the applications list.
  *
- * Lists the registered applications supporting the given service.
+ * Lists the registered applications which support the given service.
  *
  * Returns: (transfer full) (element-type AgApplication): a #GList of all the
  * applications which have declared support for the given service or for its

@@ -986,9 +986,10 @@ list_accounts ()
 
     for (iter = list; iter != NULL; iter = g_list_next (iter))
     {
-        printf ("%-10d ", iter->data);
+        printf ("%-10d ", GPOINTER_TO_UINT (iter->data));
 
-        account = ag_manager_get_account (manager, (AgAccountId) iter->data);
+        account = ag_manager_get_account (manager,
+                                          GPOINTER_TO_UINT (iter->data));
         if (account == NULL)
         {
             continue;
@@ -1141,7 +1142,7 @@ list_enabled (gchar **argv)
 
     for (iter = list; iter != NULL; iter = g_list_next (iter))
     {
-        printf ("%-10d ", iter->data);
+        printf ("%-10d ", (AgAccountId) GPOINTER_TO_UINT (iter->data));
 
         account = ag_manager_get_account (manager,
                                           GPOINTER_TO_UINT (iter->data));

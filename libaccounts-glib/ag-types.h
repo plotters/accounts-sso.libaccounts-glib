@@ -33,7 +33,8 @@ typedef struct _AgManager AgManager;
 /**
  * AgAccountId:
  *
- * ID of an account.
+ * ID of an account. Often used when retrieving lists of accounts from
+ * #AgManager.
  */
 typedef guint AgAccountId;
 

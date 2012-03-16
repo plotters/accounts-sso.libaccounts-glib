@@ -31,6 +31,8 @@
  *
  * The #AgService structure represents a service. The structure is not directly
  * exposed to applications, but its fields are accessible via getter methods.
+ * It is instantiated by #AgManager, with ag_manager_get_service(),
+ * ag_manager_list_services() or ag_manager_list_services_by_type().
  * The structure is reference counted. One must use ag_service_unref() when
  * done with it.
  */

@@ -28,10 +28,33 @@
  * @include: libaccounts-glib/ag-application.h
  *
  * The #AgApplication structure holds information on the client applications
- * registered to libaccounts.
- * It can be instantiated with ag_manager_get_application() and
- * ag_manager_list_applications_by_service(), and can be destroyed with
+ * registered with libaccounts.
+ * It is instantiated by #AgManager with ag_manager_get_application() and
+ * ag_manager_list_applications_by_service(), and destroyed with
  * ag_application_unref().
+ *
+ * <example>
+ * <title>Querying application names for an
+ * <structname>AgService</structname></title>
+ * <programlisting>
+ * AgManager *manager;
+ * GList *services, *applications;
+ * AgService *service;
+ *
+ * manager = ag_manager_new ();
+ * services = ag_manager_list_services (manager);
+ * g_assert (services != NULL);
+ * service = (AgService *) services->data;
+ * applications = ag_manager_list_applications_by_service (manager, service);
+ *
+ * g_print ("Service type: %s\n", ag_service_get_name (service));
+ * for (applications; applications != NULL; applications = applications->next)
+ * {
+ *     const gchar *application_name = ag_application_get_name ((AgApplication *) applications->data);
+ *     g_print ("  Application name: %s\n", application_name);
+ * }
+ * </programlisting>
+ * </example>
  */
 
 #include "config.h"

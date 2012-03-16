@@ -32,6 +32,12 @@
  * The #AgServiceType structure represents a service type. The structure is
  * not directly exposed to applications, but its fields are accessible via
  * getter methods.
+ * It is instantiated by #AgManager with ag_manager_list_service_types() or
+ * ag_manager_load_service_type(). Additonally, #AgManager can be instantiated
+ * with a set service type with ag_manager_new_for_service_type(), which
+ * restricts some future operations on the manager, such as ag_manager_list()
+ * or ag_manager_list_services(), to only affect accounts or services with the
+ * set service type.
  * The structure is reference counted. One must use ag_service_type_unref()
  * when done with it.
  */
@@ -376,8 +382,8 @@ ag_service_type_unref (AgServiceType *service_type)
 
 /**
  * ag_service_type_list_free:
- * @list: (element-type AgServiceType): a #GList of service types returned by some
- * function of this library.
+ * @list: (element-type AgServiceType): a #GList of service types returned by
+ * some function of this library, such as ag_manager_list_service_types().
  *
  * Frees the list @list.
  */

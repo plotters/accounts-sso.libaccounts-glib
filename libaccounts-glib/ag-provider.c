@@ -27,11 +27,16 @@
  * @short_description: A representation of a provider.
  * @include: libaccounts-glib/ag-provider.h
  *
- * The #AgProvider structure represents a provider. The structure is not
- * directly exposed to applications, but its fields are accessible via getter
- * methods.
+ * The #AgProvider structure represents an account provider. The structure is
+ * not directly exposed to applications, but its fields are accessible via
+ * getter methods. It can be instantiated by #AgManager with
+ * ag_manager_get_provider() or ag_manager_list_providers().
  * The structure is reference counted. One must use ag_provider_unref() when
  * done with it.
+ *
+ * See the <link linkend="example-create-new-AgAccount">example of creating a
+ * new <structname>AgAccount</structname></link> to see how #AgProvider can be
+ * used.
  */
 
 #include "config.h"
