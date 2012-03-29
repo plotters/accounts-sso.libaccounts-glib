@@ -84,8 +84,6 @@ fi
 
 # Python support
 
-AM_PATH_PYTHON
-
 PYGOBJECT_REQUIRED=2.90
 
 AC_ARG_ENABLE([python],
@@ -100,6 +98,8 @@ fi
 
 if test "x$enable_python" = "xyes"; then
     PKG_CHECK_MODULES(PYTHON, [pygobject-3.0 >= $PYGOBJECT_REQUIRED])
+
+    AM_PATH_PYTHON
 
     pyoverridesdir=`$PYTHON -c "import gi;print gi._overridesdir"`
     AC_SUBST(pyoverridesdir)

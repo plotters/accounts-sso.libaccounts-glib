@@ -63,7 +63,10 @@ lock_db(gboolean lock)
 
     /* this lock is to synchronize with the main test application */
     if (!lock)
-        lockf(lock_file, F_ULOCK, 0);
+    {
+        int ret = lockf(lock_file, F_ULOCK, 0);
+        g_assert(ret == 0);
+    }
 
     if (!begin_stmt)
     {
@@ -83,7 +86,10 @@ lock_db(gboolean lock)
 
     /* this lock is to synchronize with the main test application */
     if (lock)
-        lockf(lock_file, F_LOCK, 0);
+    {
+        int ret = lockf(lock_file, F_LOCK, 0);
+        g_assert(ret == 0);
+    }
 }
 
 static void
@@ -198,7 +204,11 @@ gboolean test_create2 (TestArgs *args)
     g_value_unset (&value);
 
     g_value_init (&value, G_TYPE_CHAR);
+#if GLIB_CHECK_VERSION(2,30,1)
+    g_value_set_schar (&value, 'z');
+#else
     g_value_set_char (&value, 'z');
+#endif
     ag_account_set_value (account, "character", &value);
     g_value_unset (&value);
 
@@ -249,7 +259,11 @@ gboolean test_create3 (TestArgs *args)
     g_value_unset (&value);
 
     g_value_init (&value, G_TYPE_CHAR);
+#if GLIB_CHECK_VERSION(2,30,1)
+    g_value_set_schar (&value, 'z');
+#else
     g_value_set_char (&value, 'z');
+#endif
     ag_account_set_value (account, "character", &value);
     g_value_unset (&value);
 

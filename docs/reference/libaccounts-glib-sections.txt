@@ -37,6 +37,10 @@ ag_account_watch_dir
 ag_account_watch_key
 <SUBSECTION Private>
 AgAccountClass
+AG_DEPRECATED
+AG_DEPRECATED_FOR
+G_DEPRECATED
+G_DEPRECATED_FOR
 <SUBSECTION Standard>
 AG_ACCOUNT
 AG_ACCOUNT_CLASS

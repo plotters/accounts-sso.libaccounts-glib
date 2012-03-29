@@ -38,6 +38,20 @@ typedef struct _AgManager AgManager;
  */
 typedef guint AgAccountId;
 
+/* guards to avoid bumping up the GLib dependency */
+#ifndef G_DEPRECATED
+#define G_DEPRECATED            G_GNUC_DEPRECATED
+#define G_DEPRECATED_FOR(x)     G_GNUC_DEPRECATED_FOR(x)
+#endif
+
+#ifdef AG_DISABLE_DEPRECATION_WARNINGS
+#define AG_DEPRECATED
+#define AG_DEPRECATED_FOR(x)
+#else
+#define AG_DEPRECATED           G_DEPRECATED
+#define AG_DEPRECATED_FOR(x)    G_DEPRECATED_FOR(x)
+#endif
+
 G_END_DECLS
 
 #endif /* _AG_TYPES_H_ */

@@ -355,6 +355,9 @@ START_TEST(test_account_service)
     ag_account_set_value (account, "description", &value);
     g_value_unset (&value);
 
+    ag_account_store (account, account_store_now_cb, TEST_STRING);
+    fail_unless (data_stored, "Callback not invoked immediately");
+
     service = ag_manager_get_service (manager, "MyService");
     fail_unless (service != NULL);
 
@@ -380,6 +383,20 @@ START_TEST(test_account_service)
     fail_unless (ag_account_service_get_account (account_service) == account);
 
     g_object_unref (account_service);
+
+    /* Test account service for global settings */
+    account_service = ag_account_service_new (account, NULL);
+    fail_unless (AG_IS_ACCOUNT_SERVICE (account_service),
+                 "Failed to create AccountService for global settings");
+
+    g_value_init (&value, G_TYPE_STRING);
+    source = ag_account_service_get_value (account_service, "description", &value);
+    fail_unless (source == AG_SETTING_SOURCE_ACCOUNT);
+    fail_unless (g_strcmp0 (g_value_get_string (&value), description) == 0);
+    g_value_unset (&value);
+
+    g_object_unref (account_service);
+
     end_test ();
 }
 END_TEST
@@ -1084,20 +1101,21 @@ START_TEST(test_service)
     icon_name = ag_service_get_icon_name (service);
     fail_unless (g_strcmp0 (icon_name, "general_myservice") == 0,
                  "Wrong service icon name: %s", icon_name);
-    
+
     tag_list = ag_service_get_tags (service);
     fail_unless (tag_list != NULL);
     for (list = tag_list; list != NULL; list = list->next)
     {
-        g_debug(" Service tag: %s", list->data);
-        fail_unless (g_strcmp0 (list->data, "e-mail") == 0 ||
-                     g_strcmp0 (list->data, "messaging") == 0,
-                     "Wrong service tag: %s", list->data);
+        const gchar *tag = list->data;
+        g_debug(" Service tag: %s", tag);
+        fail_unless (g_strcmp0 (tag, "e-mail") == 0 ||
+                     g_strcmp0 (tag, "messaging") == 0,
+                     "Wrong service tag: %s", tag);
     }
     g_list_free (tag_list);
     fail_unless (ag_service_has_tag (service, "e-mail"),
                  "Missing service tag");
-    
+
     ag_account_set_enabled (account, FALSE);
     ag_account_set_display_name (account, display_name);
 
@@ -1151,10 +1169,11 @@ START_TEST(test_service)
     fail_unless (tag_list != NULL);
     for (list = tag_list; list != NULL; list = list->next)
     {
-        g_debug(" Service tag: %s", list->data);
-        fail_unless (g_strcmp0 (list->data, "video") == 0 ||
-                     g_strcmp0 (list->data, "sharing") == 0,
-                     "Wrong service tag: %s", list->data);
+        const gchar *tag = list->data;
+        g_debug(" Service tag: %s", tag);
+        fail_unless (g_strcmp0 (tag, "video") == 0 ||
+                     g_strcmp0 (tag, "sharing") == 0,
+                     "Wrong service tag: %s", tag);
     }
     g_list_free (tag_list);
     fail_unless (ag_service_has_tag (service2, "sharing"),
@@ -1253,7 +1272,11 @@ START_TEST(test_service)
     g_value_init (&value, G_TYPE_CHAR);
     source = ag_account_get_value (account, "interval", &value);
     fail_unless (source == AG_SETTING_SOURCE_ACCOUNT, "Wrong source");
+#if GLIB_CHECK_VERSION(2,30,1)
+    fail_unless (g_value_get_schar (&value) == interval, "Wrong value");
+#else
     fail_unless (g_value_get_char (&value) == interval, "Wrong value");
+#endif
     g_value_unset (&value);
 
     /* change a value */
@@ -2025,7 +2048,11 @@ START_TEST(test_concurrency)
 
     g_value_init (&value, G_TYPE_CHAR);
     ag_account_get_value (account, "character", &value);
+#if GLIB_CHECK_VERSION(2,30,1)
+    fail_unless (g_value_get_schar (&value) == 'z');
+#else
     fail_unless (g_value_get_char (&value) == 'z');
+#endif
     g_value_unset (&value);
 
     g_value_init (&value, G_TYPE_BOOLEAN);

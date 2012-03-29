@@ -12,8 +12,8 @@ export G_MESSAGES_DEBUG=all
 # session
 if command -v dbus-test-runner > /dev/null ; then
     echo "Using dbus-test-runner"
-    dbus-test-runner -m 180 -t accounts-glib-testsuite
+    dbus-test-runner -m 180 -t ./accounts-glib-testsuite
 else
     echo "Using existing D-Bus session"
-    accounts-glib-testsuite "$@"
+    ./accounts-glib-testsuite "$@"
 fi

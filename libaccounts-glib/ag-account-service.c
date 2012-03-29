@@ -331,9 +331,10 @@ ag_account_service_init(AgAccountService *self)
 /**
  * ag_account_service_new:
  * @account: (transfer full): an #AgAccount.
- * @service: (transfer full): an #AgService supported by @account.
+ * @service: (transfer full) (allow-none): an #AgService supported by @account.
  *
- * Constructor.
+ * Constructor. If @service is %NULL, the returned object will operate on the
+ * global account settings.
  *
  * Returns: a new #AgAccountService; call g_object_unref() when you don't need
  * this object anymore.
