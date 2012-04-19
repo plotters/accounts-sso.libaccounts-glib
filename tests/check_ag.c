@@ -153,6 +153,7 @@ END_TEST
 START_TEST(test_provider)
 {
     const gchar *provider_name, *display_name;
+    const gchar *domains;
     AgProvider *provider;
     GList *providers;
 
@@ -183,6 +184,9 @@ START_TEST(test_provider)
 
     display_name = ag_provider_get_display_name (provider);
     fail_unless (g_strcmp0 (display_name, "My Provider") == 0);
+
+    domains = ag_provider_get_domains_regex (provider);
+    fail_unless (g_strcmp0 (domains, ".*provider\\.com") == 0);
 
     ag_provider_list_free (providers);
 

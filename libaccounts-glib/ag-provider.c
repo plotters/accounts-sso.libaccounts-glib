@@ -97,8 +97,11 @@ parse_provider (xmlTextReaderPtr reader, AgProvider *provider)
                 ok = _ag_xml_dup_element_data (reader,
                                                &provider->icon_name);
             }
-
-	    else
+            else if (strcmp (name, "domains") == 0)
+            {
+                ok = _ag_xml_dup_element_data (reader, &provider->domains);
+            }
+            else
                 ok = TRUE;
 
             if (G_UNLIKELY (!ok)) return FALSE;
@@ -264,6 +267,22 @@ ag_provider_get_display_name (AgProvider *provider)
 }
 
 /**
+ * ag_provider_get_domains_regex:
+ * @provider: the #AgProvider.
+ *
+ * Get a regular expression matching all domains where this provider's accounts
+ * can be used.
+ *
+ * Returns: a regular expression matching the domain names.
+ */
+const gchar *
+ag_provider_get_domains_regex (AgProvider *provider)
+{
+    g_return_val_if_fail (provider != NULL, NULL);
+    return provider->domains;
+}
+
+/**
  * ag_provider_get_file_contents:
  * @provider: the #AgProvider.
  * @contents: location to receive the pointer to the file contents.
@@ -334,6 +353,7 @@ ag_provider_unref (AgProvider *provider)
         g_free (provider->i18n_domain);
         g_free (provider->icon_name);
         g_free (provider->display_name);
+        g_free (provider->domains);
         g_free (provider->file_data);
         g_slice_free (AgProvider, provider);
     }

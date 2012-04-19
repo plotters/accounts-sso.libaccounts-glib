@@ -154,6 +154,7 @@ struct _AgProvider {
     gchar *icon_name;
     gchar *name;
     gchar *display_name;
+    gchar *domains;
     gchar *file_data;
 };
 

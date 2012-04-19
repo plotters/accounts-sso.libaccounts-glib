@@ -163,6 +163,7 @@ ag_provider_get_file_contents
 ag_provider_get_i18n_domain
 ag_provider_get_icon_name
 ag_provider_get_name
+ag_provider_get_domains_regex
 ag_provider_list_free
 ag_provider_ref
 ag_provider_unref

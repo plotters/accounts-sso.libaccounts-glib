@@ -2,4 +2,5 @@
 <provider id="MyProvider">
   <name>My Provider</name>
   <icon>general_myprovider</icon>
+  <domains>.*provider\.com</domains>
 </provider>
