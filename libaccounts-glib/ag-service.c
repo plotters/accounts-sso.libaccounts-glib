@@ -117,6 +117,10 @@ parse_service (xmlTextReaderPtr reader, AgService *service)
             {
                 ok = _ag_xml_dup_element_data (reader, &service->display_name);
             }
+            else if (strcmp (name, "description") == 0)
+            {
+                ok = _ag_xml_dup_element_data (reader, &service->description);
+            }
             else if (strcmp (name, "provider") == 0 && !service->provider)
             {
                 ok = _ag_xml_dup_element_data (reader, &service->provider);
@@ -365,6 +369,23 @@ ag_service_get_display_name (AgService *service)
 }
 
 /**
+ * ag_service_get_description:
+ * @service: the #AgService.
+ *
+ * Gets the description of the #AgService.
+ *
+ * Returns: the description of @service, or %NULL upon failure.
+ */
+const gchar *
+ag_service_get_description (AgService *service)
+{
+    g_return_val_if_fail (service != NULL, NULL);
+    if (service->description == NULL && !service->file_data)
+        _ag_service_load_from_file (service);
+    return service->description;
+}
+
+/**
  * ag_service_get_service_type:
  * @service: the #AgService.
  *
@@ -551,6 +572,7 @@ ag_service_unref (AgService *service)
     {
         g_free (service->name);
         g_free (service->display_name);
+        g_free (service->description);
         g_free (service->icon_name);
         g_free (service->i18n_domain);
         g_free (service->type);

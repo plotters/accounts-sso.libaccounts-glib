@@ -408,7 +408,7 @@ ag_account_service_get_enabled (AgAccountService *self)
  * ag_account_service_get_value:
  * @self: the #AgAccountService.
  * @key: the name of the setting to retrieve.
- * @value: an initialized #GValue to receive the setting's value.
+ * @value: (inout): an initialized #GValue to receive the setting's value.
  *
  * Gets the value of the configuration setting @key: @value must be a
  * #GValue initialized to the type of the setting.

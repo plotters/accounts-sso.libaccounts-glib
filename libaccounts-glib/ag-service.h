@@ -43,6 +43,7 @@ GType ag_service_get_type (void) G_GNUC_CONST;
 
 const gchar *ag_service_get_name (AgService *service);
 const gchar *ag_service_get_display_name (AgService *service);
+const gchar *ag_service_get_description (AgService *service);
 const gchar *ag_service_get_service_type (AgService *service);
 const gchar *ag_service_get_provider (AgService *service);
 const gchar *ag_service_get_icon_name (AgService *service);

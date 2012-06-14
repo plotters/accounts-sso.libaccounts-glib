@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <provider id="MyProvider">
   <name>My Provider</name>
+  <description>My Provider Description</description>
   <icon>general_myprovider</icon>
   <domains>.*provider\.com</domains>
 </provider>

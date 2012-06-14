@@ -1883,7 +1883,7 @@ ag_account_delete (AgAccount *account)
  * ag_account_get_value:
  * @account: the #AgAccount.
  * @key: the name of the setting to retrieve.
- * @value: an initialized #GValue to receive the setting's value.
+ * @value: (inout): an initialized #GValue to receive the setting's value.
  *
  * Gets the value of the configuration setting @key: @value must be a
  * #GValue initialized to the type of the setting.

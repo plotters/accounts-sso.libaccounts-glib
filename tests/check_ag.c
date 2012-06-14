@@ -153,6 +153,7 @@ END_TEST
 START_TEST(test_provider)
 {
     const gchar *provider_name, *display_name;
+    const gchar *description;
     const gchar *domains;
     AgProvider *provider;
     GList *providers;
@@ -174,6 +175,9 @@ START_TEST(test_provider)
     display_name = ag_provider_get_display_name (provider);
     fail_unless (g_strcmp0 (display_name, "My Provider") == 0);
 
+    description = ag_provider_get_description (provider);
+    fail_unless (g_strcmp0 (description, "My Provider Description") == 0);
+
     ag_provider_unref (provider);
 
     /* Test provider enumeration */
@@ -187,6 +191,8 @@ START_TEST(test_provider)
 
     domains = ag_provider_get_domains_regex (provider);
     fail_unless (g_strcmp0 (domains, ".*provider\\.com") == 0);
+
+    fail_unless (ag_provider_match_domain (provider, "www.provider.com"));
 
     ag_provider_list_free (providers);
 
@@ -1051,7 +1057,8 @@ START_TEST(test_service)
     AgService *service2;
     GList *tag_list, *list;
     AgAccountId account_id;
-    const gchar *provider_name, *service_type, *service_name, *icon_name;
+    const gchar *provider_name, *service_type, *service_name,
+                *service_description, *icon_name;
     const gchar *description = "This is really a beautiful account";
     const gchar *username = "me@myhome.com";
     const gint interval = 30;
@@ -1101,6 +1108,10 @@ START_TEST(test_service)
     service_name = ag_service_get_display_name (service);
     fail_unless (g_strcmp0 (service_name, "My Service") == 0,
                  "Wrong service display name: %s", service_name);
+
+    service_description = ag_service_get_description (service);
+    fail_unless (g_strcmp0 (service_name, "My Service Description") == 0,
+                 "Wrong service description: %s", service_description);
 
     icon_name = ag_service_get_icon_name (service);
     fail_unless (g_strcmp0 (icon_name, "general_myservice") == 0,
@@ -2939,6 +2950,10 @@ START_TEST(test_service_type)
     string = ag_service_type_get_display_name (service_type);
     fail_unless (g_strcmp0 (string, "Electronic mail") == 0,
                  "Wrong service type display name: %s", string);
+
+    string = ag_service_type_get_description (service_type);
+    fail_unless (g_strcmp0 (string, "Electronic mail description") == 0,
+                 "Wrong service type description: %s", string);
 
     string = ag_service_type_get_icon_name (service_type);
     fail_unless (g_strcmp0 (string, "email_icon") == 0,

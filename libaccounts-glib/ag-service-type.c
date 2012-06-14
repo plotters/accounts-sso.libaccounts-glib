@@ -56,6 +56,7 @@ struct _AgServiceType {
     gchar *name;
     gchar *i18n_domain;
     gchar *display_name;
+    gchar *description;
     gchar *icon_name;
     gchar *file_data;
     gsize file_data_len;
@@ -99,6 +100,11 @@ parse_service_type (xmlTextReaderPtr reader, AgServiceType *service_type)
             {
                 ok = _ag_xml_dup_element_data (reader,
                                                &service_type->display_name);
+            }
+            else if (strcmp (name, "description") == 0)
+            {
+                ok = _ag_xml_dup_element_data (reader,
+                                               &service_type->description);
             }
             else if (strcmp (name, "icon") == 0)
             {
@@ -261,6 +267,21 @@ ag_service_type_get_display_name (AgServiceType *service_type)
 }
 
 /**
+ * ag_service_type_get_description:
+ * @service_type: the #AgServiceType.
+ *
+ * Get the description of the #AgServiceType.
+ *
+ * Returns: the description of @service_type, or %NULL upon failure.
+ */
+const gchar *
+ag_service_type_get_description (AgServiceType *service_type)
+{
+    g_return_val_if_fail (service_type != NULL, NULL);
+    return service_type->description;
+}
+
+/**
  * ag_service_type_get_icon_name:
  * @service_type: the #AgServiceType.
  *
@@ -372,6 +393,7 @@ ag_service_type_unref (AgServiceType *service_type)
         g_free (service_type->name);
         g_free (service_type->i18n_domain);
         g_free (service_type->display_name);
+        g_free (service_type->description);
         g_free (service_type->icon_name);
         g_free (service_type->file_data);
         if (service_type->tags)

@@ -2,6 +2,7 @@
 <service-type id="e-mail">
   <translations>translation_file</translations>
   <name>Electronic mail</name>
+  <description>Electronic mail description</description>
   <icon>email_icon</icon>
   <tags>
       <tag>e-mail</tag>

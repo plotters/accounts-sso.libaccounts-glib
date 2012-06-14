@@ -44,6 +44,7 @@ GType ag_service_type_get_type (void) G_GNUC_CONST;
 const gchar *ag_service_type_get_name (AgServiceType *service_type);
 const gchar *ag_service_type_get_i18n_domain (AgServiceType *service_type);
 const gchar *ag_service_type_get_display_name (AgServiceType *service_type);
+const gchar *ag_service_type_get_description (AgServiceType *service_type);
 const gchar *ag_service_type_get_icon_name (AgServiceType *service_type);
 gboolean ag_service_type_has_tag (AgServiceType *service_type,
                                   const gchar *tag);

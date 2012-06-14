@@ -159,11 +159,13 @@ ag_manager_get_type
 <TITLE>AgProvider</TITLE>
 AgProvider
 ag_provider_get_display_name
+ag_provider_get_description
 ag_provider_get_file_contents
 ag_provider_get_i18n_domain
 ag_provider_get_icon_name
 ag_provider_get_name
 ag_provider_get_domains_regex
+ag_provider_match_domain
 ag_provider_list_free
 ag_provider_ref
 ag_provider_unref
@@ -176,6 +178,7 @@ ag_provider_get_type
 <TITLE>AgService</TITLE>
 AgService
 ag_service_get_display_name
+ag_service_get_description
 ag_service_get_file_contents
 ag_service_get_i18n_domain
 ag_service_get_icon_name
@@ -196,6 +199,7 @@ ag_service_get_type
 <TITLE>AgServiceType</TITLE>
 AgServiceType
 ag_service_type_get_display_name
+ag_service_type_get_description
 ag_service_type_get_file_contents
 ag_service_type_get_i18n_domain
 ag_service_type_get_icon_name
