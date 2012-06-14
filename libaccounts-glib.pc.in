@@ -2,7 +2,9 @@ prefix=@prefix@
 exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
+applicationfilesdir=${prefix}/share/@APPLICATION_FILES_DIR@
 servicefilesdir=${prefix}/share/@SERVICE_FILES_DIR@
+servicetypefilesdir=${prefix}/share/@SERVICE_TYPE_FILES_DIR@
 providerfilesdir=${prefix}/share/@PROVIDER_FILES_DIR@
 
 Name: libaccounts-glib
