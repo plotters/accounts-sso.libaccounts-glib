@@ -1287,7 +1287,7 @@ START_TEST(test_service)
     g_value_init (&value, G_TYPE_CHAR);
     source = ag_account_get_value (account, "interval", &value);
     fail_unless (source == AG_SETTING_SOURCE_ACCOUNT, "Wrong source");
-#if GLIB_CHECK_VERSION(2,30,1)
+#if GLIB_CHECK_VERSION(2,32,0)
     fail_unless (g_value_get_schar (&value) == interval, "Wrong value");
 #else
     fail_unless (g_value_get_char (&value) == interval, "Wrong value");
@@ -2063,7 +2063,7 @@ START_TEST(test_concurrency)
 
     g_value_init (&value, G_TYPE_CHAR);
     ag_account_get_value (account, "character", &value);
-#if GLIB_CHECK_VERSION(2,30,1)
+#if GLIB_CHECK_VERSION(2,32,0)
     fail_unless (g_value_get_schar (&value) == 'z');
 #else
     fail_unless (g_value_get_char (&value) == 'z');

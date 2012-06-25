@@ -204,7 +204,7 @@ gboolean test_create2 (TestArgs *args)
     g_value_unset (&value);
 
     g_value_init (&value, G_TYPE_CHAR);
-#if GLIB_CHECK_VERSION(2,30,1)
+#if GLIB_CHECK_VERSION(2,32,0)
     g_value_set_schar (&value, 'z');
 #else
     g_value_set_char (&value, 'z');
@@ -259,7 +259,7 @@ gboolean test_create3 (TestArgs *args)
     g_value_unset (&value);
 
     g_value_init (&value, G_TYPE_CHAR);
-#if GLIB_CHECK_VERSION(2,30,1)
+#if GLIB_CHECK_VERSION(2,32,0)
     g_value_set_schar (&value, 'z');
 #else
     g_value_set_char (&value, 'z');
