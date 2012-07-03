@@ -2,18 +2,18 @@ Name:           libaccounts-glib
 Version:        0.58
 Release:        1
 License:        LGPLv2.1
-Summary:        Nokia Maemo Accounts base library
+Summary:        Accounts base library
 Url:            http://gitorious.org/accounts-sso/accounts-glib
 Group:          System/Libraries
 Source0:        %{name}-%{version}.tar.gz
-Source1:        libaccounts-glib.sh
 BuildRequires:  automake
-BuildRequires:  gtk-doc
+# In Tizen builds no gtk-doc support hence removing gtk-doc dependency
+#BuildRequires:  gtk-doc
 BuildRequires:  pkgconfig
 BuildRequires:  pkgconfig(check) >= 0.9.4
 BuildRequires:  pkgconfig(dbus-1)
 BuildRequires:  pkgconfig(dbus-glib-1)
-BuildRequires:  pkgconfig(glib-2.0)
+BuildRequires:  pkgconfig(glib-2.0) >= 2.30.0
 BuildRequires:  pkgconfig(libxml-2.0)
 BuildRequires:  pkgconfig(sqlite3)
 
@@ -43,15 +43,23 @@ This package contains %{name} tests.
 %setup -q
 
 %build
-gtkdocize
+# In Tizen builds no gtk-doc support hence removing gtk-doc dependency
+#gtkdocize
 autoreconf -vfi
 %configure --disable-static --disable-gtk-doc
 make %{?_smp_mflags}
 
 %install
 %make_install
-install -D -p -m 0644 %{_sourcedir}/%{name}.sh \
-%{buildroot}%{_sysconfdir}/profile.d/%{name}.sh
+%define srcdir %{_builddir}/%{name}-%{version}
+install -p -m 644 %{srcdir}/tests/accounts-glib-test.sh $RPM_BUILD_ROOT/%{_bindir}/
+mkdir -p $RPM_BUILD_ROOT/%{_datadir}/libaccounts-glib0-test/
+install -p -m 644 %{srcdir}/tests/e-mail.service-type $RPM_BUILD_ROOT/%{_datadir}/libaccounts-glib0-test/
+install -p -m 644 %{srcdir}/tests/MyProvider.provider $RPM_BUILD_ROOT/%{_datadir}/libaccounts-glib0-test/
+install -p -m 644 %{srcdir}/tests/MyService.service $RPM_BUILD_ROOT/%{_datadir}/libaccounts-glib0-test/
+install -p -m 644 %{srcdir}/tests/OtherService.service $RPM_BUILD_ROOT/%{_datadir}/libaccounts-glib0-test/
+install -p -m 644 %{srcdir}/tests/tests.xml $RPM_BUILD_ROOT/%{_datadir}/libaccounts-glib0-test/
+
 
 %post -p /sbin/ldconfig
 
@@ -60,18 +68,24 @@ install -D -p -m 0644 %{_sourcedir}/%{name}.sh \
 %files
 %defattr(-,root,root,-)
 %doc README COPYING
-%config %{_sysconfdir}/profile.d/%{name}.sh
 %{_libdir}/libaccounts-glib.so.*
 %{_datadir}/backup-framework/applications/accounts.conf
+%{_bindir}/ag-backup
+%{_bindir}/ag-tool
 
 %files devel
 %defattr(-,root,root,-)
+%{_includedir}/libaccounts-glib/ag-types.h
 %{_includedir}/libaccounts-glib/ag-account.h
 %{_includedir}/libaccounts-glib/ag-errors.h
 %{_includedir}/libaccounts-glib/ag-manager.h
 %{_includedir}/libaccounts-glib/ag-provider.h
 %{_includedir}/libaccounts-glib/ag-service-type.h
 %{_includedir}/libaccounts-glib/ag-service.h
+%{_includedir}/libaccounts-glib/ag-auth-data.h
+%{_includedir}/libaccounts-glib/ag-application.h
+%{_includedir}/libaccounts-glib/ag-account-service.h
+%{_includedir}/libaccounts-glib/accounts-glib.h
 %{_libdir}/libaccounts-glib.so
 %{_libdir}/pkgconfig/libaccounts-glib.pc
 

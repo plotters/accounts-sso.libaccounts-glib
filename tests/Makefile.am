@@ -2,7 +2,10 @@
 
 INCLUDES=-I$(top_srcdir) $(LIBACCOUNTS_CFLAGS)
 
-check_PROGRAMS = accounts-glib-testsuite test-process 
+check_PROGRAMS = accounts-glib-testsuite test-process
+# Build tests in make process, which helps to creating tests package
+# without running make check
+bin_PROGRAMS = $(check_PROGRAMS)
 
 check_SCRIPTS = accounts-glib-test.sh
 
