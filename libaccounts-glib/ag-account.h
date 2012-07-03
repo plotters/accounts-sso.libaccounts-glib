@@ -40,7 +40,6 @@ G_BEGIN_DECLS
 
 typedef struct _AgAccountClass AgAccountClass;
 typedef struct _AgAccountPrivate AgAccountPrivate;
-typedef struct _AgAccount AgAccount;
 
 /**
  * AgAccountClass:

@@ -45,7 +45,6 @@ G_BEGIN_DECLS
 
 typedef struct _AgManagerClass AgManagerClass;
 typedef struct _AgManagerPrivate AgManagerPrivate;
-typedef struct _AgManager AgManager;
 
 /**
  * AgManagerClass:
