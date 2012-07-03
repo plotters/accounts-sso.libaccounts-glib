@@ -12,6 +12,7 @@ ag_tool_SOURCES = main.c
 ag_tool_CFLAGS = $(CHECK_FLAGS) -I$(top_srcdir)
 ag_tool_LDADD = \
         $(CHECK_LIBS) \
+	    $(LIBACCOUNTS_LIBS) \
         $(top_builddir)/libaccounts-glib/libaccounts-glib.la
 
 ag_backup_SOURCES = backup.c
