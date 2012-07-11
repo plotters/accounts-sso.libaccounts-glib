@@ -666,6 +666,7 @@ _ag_account_done_changes (AgAccount *account, AgAccountChanges *changes)
     if (changes->deleted)
     {
         priv->deleted = TRUE;
+        priv->enabled = FALSE;
         g_signal_emit (account, signals[ENABLED], 0, NULL, FALSE);
         g_signal_emit (account, signals[DELETED], 0);
     }

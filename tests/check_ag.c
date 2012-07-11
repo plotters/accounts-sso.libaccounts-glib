@@ -2600,6 +2600,64 @@ START_TEST(test_enabled_regression)
 }
 END_TEST
 
+START_TEST(test_delete_regression)
+{
+    AgAccountId id;
+    AgAccountService *account_service;
+    gboolean enabled_called, deleted_called;
+
+    g_type_init ();
+
+    manager = ag_manager_new_for_service_type ("e-mail");
+
+    /* create an account */
+    account = ag_manager_create_account (manager, PROVIDER);
+    ag_account_set_enabled (account, TRUE);
+
+    service = ag_manager_get_service (manager, "MyService");
+    fail_unless (service != NULL);
+    ag_account_select_service (account, service);
+    ag_account_set_enabled (account, TRUE);
+
+    ag_account_store (account, account_store_now_cb, TEST_STRING);
+    fail_unless (data_stored, "Callback not invoked immediately");
+
+    fail_unless (account->id != 0, "Account ID is still 0!");
+    id = account->id;
+
+    account_service = ag_account_service_new (account, service);
+
+    /* monitor the account status */
+    g_signal_connect_swapped (account_service, "enabled",
+                              G_CALLBACK (set_boolean_variable),
+                              &enabled_called);
+    g_signal_connect_swapped (account, "deleted",
+                              G_CALLBACK (set_boolean_variable),
+                              &deleted_called);
+    enabled_called = deleted_called = FALSE;
+
+    /* delete it */
+    ag_account_delete (account);
+
+    /* until ag_account_store() is called, the signals should not have been
+     * emitted */
+    fail_unless (enabled_called == FALSE, "Accound disabled too early!");
+    fail_unless (deleted_called == FALSE, "Accound deleted too early!");
+
+    /* really delete the account */
+    ag_account_store (account, account_store_now_cb, TEST_STRING);
+    fail_unless (data_stored, "Callback not invoked immediately");
+
+    /* check that the signals are emitted */
+    fail_unless (enabled_called, "Accound enabled signal not emitted");
+    fail_unless (deleted_called, "Accound deleted signal not emitted");
+
+    g_object_unref (account_service);
+
+    end_test ();
+}
+END_TEST
+
 START_TEST(test_manager_new_for_service_type)
 {
     AgAccount *account1, *account2;
@@ -3160,6 +3218,7 @@ ag_suite(const char *test_case)
     tcase_add_test (tc, test_cache_regression);
     tcase_add_test (tc, test_serviceid_regression);
     tcase_add_test (tc, test_enabled_regression);
+    tcase_add_test (tc, test_delete_regression);
     IF_TEST_CASE_ENABLED("Regression")
         suite_add_tcase (s, tc);
 
