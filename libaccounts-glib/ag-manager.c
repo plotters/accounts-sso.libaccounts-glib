@@ -48,8 +48,10 @@
 #include "ag-manager.h"
 
 #include "ag-account-service.h"
+#include "ag-application.h"
 #include "ag-errors.h"
 #include "ag-internals.h"
+#include "ag-service.h"
 #include "ag-util.h"
 #include <dbus/dbus-glib-lowlevel.h>
 #include <sched.h>

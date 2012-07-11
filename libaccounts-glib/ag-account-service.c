@@ -116,6 +116,7 @@
 #include "ag-errors.h"
 #include "ag-internals.h"
 #include "ag-manager.h"
+#include "ag-service.h"
 #include "ag-service-type.h"
 #include "ag-util.h"
 

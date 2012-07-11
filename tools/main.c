@@ -24,6 +24,7 @@
 
 #include "libaccounts-glib/ag-account.h"
 #include "libaccounts-glib/ag-manager.h"
+#include "libaccounts-glib/ag-service.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

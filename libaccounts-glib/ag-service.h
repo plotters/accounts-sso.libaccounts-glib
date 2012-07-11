@@ -29,15 +29,10 @@
 
 #include <glib.h>
 #include <glib-object.h>
+#include <libaccounts-glib/ag-types.h>
 
 G_BEGIN_DECLS
 
-/**
- * AgService:
- *
- * Use the accessor functions below.
- */
-typedef struct _AgService AgService;
 
 GType ag_service_get_type (void) G_GNUC_CONST;
 

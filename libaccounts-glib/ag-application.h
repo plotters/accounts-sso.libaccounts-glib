@@ -27,16 +27,9 @@
 
 #include <gio/gdesktopappinfo.h>
 #include <glib-object.h>
-#include <libaccounts-glib/ag-service.h>
+#include <libaccounts-glib/ag-types.h>
 
 G_BEGIN_DECLS
-
-/**
- * AgApplication:
- *
- * Opaque structure. Use the accessor functions below.
- */
-typedef struct _AgApplication AgApplication;
 
 GType ag_application_get_type (void) G_GNUC_CONST;
 

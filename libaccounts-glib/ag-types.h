@@ -27,8 +27,54 @@
 
 G_BEGIN_DECLS
 
+/**
+ * AgAccount:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
 typedef struct _AgAccount AgAccount;
+/**
+ * AgManager:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
 typedef struct _AgManager AgManager;
+/**
+ * AgService:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
+typedef struct _AgService AgService;
+/**
+ * AgAccountService:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
+typedef struct _AgAccountService AgAccountService;
+/**
+ * AgProvider:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
+typedef struct _AgProvider AgProvider;
+/**
+ * AgAuthData:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
+typedef struct _AgAuthData AgAuthData;
+/**
+ * AgServiceType:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
+typedef struct _AgServiceType AgServiceType;
+/**
+ * AgApplication:
+ *
+ * Opaque structure. Use related accessor functions.
+ */
+typedef struct _AgApplication AgApplication;
 
 /**
  * AgAccountId:

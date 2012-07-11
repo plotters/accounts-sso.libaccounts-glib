@@ -26,16 +26,9 @@
 #define _AG_AUTH_DATA_H_
 
 #include <glib-object.h>
-#include <libaccounts-glib/ag-auth-data.h>
+#include <libaccounts-glib/ag-types.h>
 
 G_BEGIN_DECLS
-
-/**
- * AgAuthData:
- *
- * Opaque structure. Use the accessor functions below.
- */
-typedef struct _AgAuthData AgAuthData;
 
 GType ag_auth_data_get_type (void) G_GNUC_CONST;
 
