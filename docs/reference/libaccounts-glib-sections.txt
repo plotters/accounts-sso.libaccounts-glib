@@ -115,6 +115,7 @@ ag_application_get_type
 <FILE>ag-manager</FILE>
 <TITLE>AgManager</TITLE>
 AgManager
+AgAccountsError
 ag_manager_create_account
 ag_manager_get_abort_on_db_timeout
 ag_manager_get_account
@@ -143,7 +144,11 @@ ag_manager_set_abort_on_db_timeout
 ag_manager_set_db_timeout
 <SUBSECTION Private>
 AgManagerClass
+AG_ERRORS
+AgError
+ag_errors_quark
 <SUBSECTION Standard>
+AG_ACCOUNTS_ERROR
 AG_IS_MANAGER
 AG_IS_MANAGER_CLASS
 AG_MANAGER
@@ -151,6 +156,7 @@ AG_MANAGER_CLASS
 AG_MANAGER_GET_CLASS
 AG_TYPE_MANAGER
 AgManagerPrivate
+ag_accounts_error_quark
 ag_manager_get_type
 </SECTION>
 

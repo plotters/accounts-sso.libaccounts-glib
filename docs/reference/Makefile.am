@@ -43,7 +43,7 @@ CFILE_GLOB=$(top_srcdir)/libaccounts-glib/*.c
 
 # Header files to ignore when scanning.
 # e.g. IGNORE_HFILES=gtkdebug.h gtkintl.h
-IGNORE_HFILES=ag-marshal.h ag-debug.h ag-errors.h ag-internals.h ag-util.h
+IGNORE_HFILES=ag-marshal.h ag-debug.h ag-internals.h ag-util.h
 
 # Images to copy into HTML directory.
 # e.g. HTML_IMAGES=$(top_srcdir)/gtk/stock-icons/stock_about_24.png

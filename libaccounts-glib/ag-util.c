@@ -4,9 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Canonical Ltd.
  * Copyright (C) 2012 Intel Corporation.
  *
- * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
  * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -259,6 +260,19 @@ ag_errors_quark (void)
     }
 
     return (GQuark) quark;
+}
+
+/**
+ * ag_accounts_error_quark:
+ *
+ * Return the libaccounts-glib error domain.
+ *
+ * Returns: the libaccounts-glib error domain.
+ */
+GQuark
+ag_accounts_error_quark (void)
+{
+    return ag_errors_quark ();
 }
 
 static void

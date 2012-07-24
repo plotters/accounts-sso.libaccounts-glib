@@ -4,9 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Canonical Ltd.
  * Copyright (C) 2012 Intel Corporation.
  *
- * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
  * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -37,9 +38,8 @@
 
 G_BEGIN_DECLS
 
-#define AG_DBUS_PATH "/com/nokia/AccountsLib"
-#define AG_DBUS_PATH_SERVICE "/com/nokia/AccountsLib/ServiceType"
-#define AG_DBUS_IFACE "com.nokia.AccountsLib"
+#define AG_DBUS_PATH_SERVICE "/ServiceType"
+#define AG_DBUS_IFACE "com.google.code.AccountsSSO.Accounts"
 #define AG_DBUS_SIG_CHANGED "AccountChanged"
 
 #define SERVICE_GLOBAL_TYPE "global"

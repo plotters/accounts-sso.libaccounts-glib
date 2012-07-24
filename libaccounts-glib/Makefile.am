@@ -1,10 +1,12 @@
 lib_LTLIBRARIES = \
 	libaccounts-glib.la
 
+libaccounts_glib_la_CPPFLAGS = \
+	-I$(top_srcdir) \
+	-DG_LOG_DOMAIN=\"accounts-glib\"
 libaccounts_glib_la_CFLAGS = \
 	$(LIBACCOUNTS_CFLAGS) \
 	$(AEGISCRYPTO_CFLAGS) \
-	-I$(top_srcdir) \
 	-Wall -Werror
 libaccounts_glib_la_LIBADD = $(LIBACCOUNTS_LIBS) $(AEGISCRYPTO_LIBS) -lrt
 libaccounts_glib_la_LDFLAGS = \

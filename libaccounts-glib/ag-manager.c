@@ -4,9 +4,10 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Canonical Ltd.
  * Copyright (C) 2012 Intel Corporation.
  *
- * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
  * Contact: Jussi Laako <jussi.laako@linux.intel.com>
  *
  * This library is free software; you can redistribute it and/or
@@ -358,16 +359,16 @@ set_error_from_db (AgManager *manager)
         _ag_manager_take_error (manager, NULL);
         return;
     case SQLITE_BUSY:
-        code = AG_ERROR_DB_LOCKED;
+        code = AG_ACCOUNTS_ERROR_DB_LOCKED;
         if (priv->abort_on_db_timeout)
             g_error ("Accounts DB timeout: causing application to abort.");
         break;
     default:
-        code = AG_ERROR_DB;
+        code = AG_ACCOUNTS_ERROR_DB;
         break;
     }
 
-    error = g_error_new (AG_ERRORS, code, "SQLite error %d: %s",
+    error = g_error_new (AG_ACCOUNTS_ERROR, code, "SQLite error %d: %s",
                          sqlite3_errcode (priv->db),
                          sqlite3_errmsg (priv->db));
     _ag_manager_take_error (manager, error);
@@ -392,6 +393,7 @@ parse_message_header (DBusMessageIter *iter,
     if (G_UNLIKELY (dbus_message_iter_get_arg_type (iter) != t)) return FALSE
 
     EXPECT_TYPE (DBUS_TYPE_UINT32);
+    memset (ts, 0, sizeof (struct timespec));
     dbus_message_iter_get_basic (iter, &ts->tv_sec);
     dbus_message_iter_next (iter);
 
@@ -520,6 +522,11 @@ message_is_from_interesting_object (DBusMessage *msg, GPtrArray *object_paths)
 {
     const gchar *msg_object_path;
     gint i;
+
+    /* If the object_paths array is empty, it means that we are
+     * interested in all service types. */
+    if (object_paths->len == 0)
+        return TRUE;
 
     msg_object_path = dbus_message_get_path (msg);
     if (G_UNLIKELY (msg_object_path == NULL))
@@ -718,7 +725,6 @@ signal_account_changes (AgManager *manager, AgAccount *account,
 {
     AgManagerPrivate *priv = manager->priv;
     DBusMessage *msg;
-    gboolean ret;
     EmittedSignalData eds;
 
     clock_gettime(CLOCK_MONOTONIC, &eds.ts);
@@ -728,13 +734,6 @@ signal_account_changes (AgManager *manager, AgAccount *account,
     {
         g_warning ("Creation of D-Bus signal failed");
         return;
-    }
-
-    ret = dbus_connection_send (priv->dbus_conn, msg, NULL);
-    if (G_UNLIKELY (!ret))
-    {
-        g_warning ("Emission of DBus signal failed");
-        goto finish;
     }
 
     /* emit the signal on all service-types */
@@ -748,7 +747,6 @@ signal_account_changes (AgManager *manager, AgAccount *account,
         g_list_prepend (priv->emitted_signals,
                         g_slice_dup (EmittedSignalData, &eds));
 
-finish:
     dbus_message_unref (msg);
 }
 
@@ -869,7 +867,8 @@ exec_transaction (AgManager *manager, AgAccount *account,
     ret = sqlite3_exec (priv->db, sql, NULL, NULL, &err_msg);
     if (G_UNLIKELY (ret != SQLITE_OK))
     {
-        *error = g_error_new (AG_ERRORS, AG_ERROR_DB, "%s", err_msg);
+        *error = g_error_new (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB, "%s",
+                              err_msg);
         if (err_msg)
             sqlite3_free (err_msg);
 
@@ -884,7 +883,7 @@ exec_transaction (AgManager *manager, AgAccount *account,
     ret = sqlite3_step (priv->commit_stmt);
     if (G_UNLIKELY (ret != SQLITE_DONE))
     {
-        *error = g_error_new_literal (AG_ERRORS, AG_ERROR_DB,
+        *error = g_error_new_literal (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
                                       sqlite3_errmsg (priv->db));
         sqlite3_reset (priv->commit_stmt);
         return;
@@ -926,7 +925,8 @@ lost_weak_ref (gpointer data, GObject *dead)
     StoreCbData *sd = data;
     AgManagerPrivate *priv;
 
-    GError error = { AG_ERRORS, AG_ERROR_DISPOSED, "Account disposed" };
+    GError error = { AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DISPOSED,
+                     "Account disposed" };
 
     g_assert ((GObject *)sd->account == dead);
     _ag_account_store_completed (sd->account, sd->changes,
@@ -977,7 +977,8 @@ exec_transaction_idle (StoreCbData *sd)
     }
     else
     {
-        error = g_error_new_literal (AG_ERRORS, AG_ERROR_DB, "Generic error");
+        error = g_error_new_literal (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
+                                     "Generic error");
     }
     _ag_account_store_completed (account, sd->changes,
                                  sd->callback, error, sd->user_data);
@@ -1262,6 +1263,24 @@ add_matches (AgManagerPrivate *priv)
     return TRUE;
 }
 
+static inline gboolean
+add_typeless_match (AgManagerPrivate *priv)
+{
+    DBusError error;
+
+    dbus_error_init (&error);
+    dbus_bus_add_match (priv->dbus_conn,
+                        "type='signal',interface='" AG_DBUS_IFACE "'",
+                        &error);
+    if (G_UNLIKELY (dbus_error_is_set (&error)))
+    {
+        g_warning ("Failed to add dbus filter (%s)", error.message);
+        dbus_error_free (&error);
+        return FALSE;
+    }
+    return TRUE;
+}
+
 static gboolean
 setup_dbus (AgManager *manager)
 {
@@ -1290,7 +1309,8 @@ setup_dbus (AgManager *manager)
     if (priv->service_type == NULL)
     {
         /* listen to all changes */
-        g_ptr_array_add (priv->object_paths, g_strdup (AG_DBUS_PATH));
+        ret = add_typeless_match (priv);
+        if (G_UNLIKELY (!ret)) return FALSE;
     }
     else
     {
@@ -1305,10 +1325,10 @@ setup_dbus (AgManager *manager)
         /* add also the global service type */
         g_ptr_array_add (priv->object_paths,
                          g_strdup (AG_DBUS_PATH_SERVICE_GLOBAL));
-    }
 
-    ret = add_matches(priv);
-    if (G_UNLIKELY (!ret)) return FALSE;
+        ret = add_matches (priv);
+        if (G_UNLIKELY (!ret)) return FALSE;
+    }
 
     dbus_connection_setup_with_g_main (priv->dbus_conn, NULL);
     return TRUE;
@@ -2123,7 +2143,8 @@ _ag_manager_exec_transaction (AgManager *manager, const gchar *sql,
     ret = prepare_transaction_statements (priv);
     if (G_UNLIKELY (ret != SQLITE_OK))
     {
-        error = g_error_new (AG_ERRORS, AG_ERROR_DB, "Got error: %s (%d)",
+        error = g_error_new (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
+                             "Got error: %s (%d)",
                              sqlite3_errmsg (priv->db), ret);
         goto finish;
     }
@@ -2151,7 +2172,8 @@ _ag_manager_exec_transaction (AgManager *manager, const gchar *sql,
 
     if (ret != SQLITE_DONE)
     {
-        error = g_error_new (AG_ERRORS, AG_ERROR_DB, "Got error: %s (%d)",
+        error = g_error_new (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
+                             "Got error: %s (%d)",
                              sqlite3_errmsg (priv->db), ret);
         goto finish;
     }
@@ -2178,7 +2200,8 @@ _ag_manager_exec_transaction_blocking (AgManager *manager, const gchar *sql,
     ret = prepare_transaction_statements (priv);
     if (G_UNLIKELY (ret != SQLITE_OK))
     {
-        *error = g_error_new (AG_ERRORS, AG_ERROR_DB, "Got error: %s (%d)",
+        *error = g_error_new (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
+                              "Got error: %s (%d)",
                               sqlite3_errmsg (priv->db), ret);
         return;
     }
@@ -2202,7 +2225,8 @@ _ag_manager_exec_transaction_blocking (AgManager *manager, const gchar *sql,
 
     if (ret != SQLITE_DONE)
     {
-        *error = g_error_new (AG_ERRORS, AG_ERROR_DB, "Got error: %s (%d)",
+        *error = g_error_new (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
+                              "Got error: %s (%d)",
                               sqlite3_errmsg (priv->db), ret);
         return;
     }

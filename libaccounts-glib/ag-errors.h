@@ -4,8 +4,9 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
+ * Copyright (C) 2012 Canonical Ltd.
  *
- * Contact: Alberto Mardegan <alberto.mardegan@nokia.com>
+ * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public License
@@ -30,8 +31,17 @@
 G_BEGIN_DECLS
 
 GQuark ag_errors_quark (void);
+GQuark ag_accounts_error_quark (void);
 
 #define AG_ERRORS   ag_errors_quark ()
+
+/**
+ * AG_ACCOUNTS_ERROR:
+ *
+ * Error domain for libaccounts-glib errors. Errors in this domain will be from
+ * the AgAccountsError enumeration.
+ */
+#define AG_ACCOUNTS_ERROR AG_ERRORS
 
 typedef enum {
     AG_ERROR_DB,
@@ -40,6 +50,26 @@ typedef enum {
     AG_ERROR_DB_LOCKED,
     AG_ERROR_ACCOUNT_NOT_FOUND,
 } AgError;
+
+/**
+ * AgAccountsError:
+ * @AG_ACCOUNTS_ERROR_DB: there was an error accessing the accounts database
+ * @AG_ACCOUNTS_ERROR_DISPOSED: the account was in the process of being
+ * disposed
+ * @AG_ACCOUNTS_ERROR_DELETED: the account was in the process of being deleted
+ * @AG_ACCOUNTS_ERROR_DB_LOCKED: the database was locked
+ * @AG_ACCOUNTS_ERROR_ACCOUNT_NOT_FOUND: the requested account was not found
+ *
+ * These identify the various errors that can occur with methods in
+ * libaccounts-glib that return a #GError.
+ */
+typedef enum {
+    AG_ACCOUNTS_ERROR_DB = AG_ERROR_DB,
+    AG_ACCOUNTS_ERROR_DISPOSED = AG_ERROR_DISPOSED,
+    AG_ACCOUNTS_ERROR_DELETED = AG_ERROR_DELETED,
+    AG_ACCOUNTS_ERROR_DB_LOCKED = AG_ERROR_DB_LOCKED,
+    AG_ACCOUNTS_ERROR_ACCOUNT_NOT_FOUND = AG_ERROR_ACCOUNT_NOT_FOUND
+} AgAccountsError;
 
 G_END_DECLS
 
