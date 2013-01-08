@@ -4,7 +4,7 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
- * Copyright (C) 2012 Canonical Ltd.
+ * Copyright (C) 2012-2013 Canonical Ltd.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
  *
@@ -42,6 +42,7 @@ const gchar *ag_provider_get_icon_name (AgProvider *provider);
 const gchar *ag_provider_get_domains_regex (AgProvider *provider);
 gboolean ag_provider_match_domain (AgProvider *provider,
                                    const gchar *domain);
+const gchar *ag_provider_get_plugin_name (AgProvider *provider);
 void ag_provider_get_file_contents (AgProvider *provider,
                                     const gchar **contents);
 AgProvider *ag_provider_ref (AgProvider *provider);

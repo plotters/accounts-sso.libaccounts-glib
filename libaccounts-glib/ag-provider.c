@@ -4,7 +4,7 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
- * Copyright (C) 2012 Canonical Ltd.
+ * Copyright (C) 2012-2013 Canonical Ltd.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
  *
@@ -52,6 +52,29 @@
 G_DEFINE_BOXED_TYPE (AgProvider, ag_provider,
                      (GBoxedCopyFunc)ag_provider_ref,
                      (GBoxedFreeFunc)ag_provider_unref);
+
+static gboolean
+parse_template (xmlTextReaderPtr reader, AgProvider *provider)
+{
+    GHashTable *settings;
+    gboolean ok;
+
+    g_return_val_if_fail (provider->default_settings == NULL, FALSE);
+
+    settings =
+        g_hash_table_new_full (g_str_hash, g_str_equal,
+                               g_free, (GDestroyNotify)g_variant_unref);
+
+    ok = _ag_xml_parse_settings (reader, "", settings);
+    if (G_UNLIKELY (!ok))
+    {
+        g_hash_table_destroy (settings);
+        return FALSE;
+    }
+
+    provider->default_settings = settings;
+    return TRUE;
+}
 
 static gboolean
 parse_provider (xmlTextReaderPtr reader, AgProvider *provider)
@@ -106,6 +129,14 @@ parse_provider (xmlTextReaderPtr reader, AgProvider *provider)
             else if (strcmp (name, "domains") == 0)
             {
                 ok = _ag_xml_dup_element_data (reader, &provider->domains);
+            }
+            else if (strcmp (name, "plugin") == 0)
+            {
+                ok = _ag_xml_dup_element_data (reader, &provider->plugin_name);
+            }
+            else if (strcmp (name, "template") == 0)
+            {
+                ok = parse_template (reader, provider);
             }
             else
                 ok = TRUE;
@@ -212,6 +243,41 @@ _ag_provider_new_from_file (const gchar *provider_name)
     return provider;
 }
 
+GHashTable *
+_ag_provider_load_default_settings (AgProvider *provider)
+{
+    g_return_val_if_fail (provider != NULL, NULL);
+
+    if (!provider->default_settings)
+    {
+        /* This can happen if the provider was created by the AccountManager by
+         * loading the record from the DB.
+         * Now we must reload the provider from its XML file.
+         */
+        if (!_ag_provider_load_from_file (provider))
+        {
+            g_warning ("Loading provider %s file failed", provider->name);
+            return NULL;
+        }
+    }
+
+    return provider->default_settings;
+}
+
+GVariant *
+_ag_provider_get_default_setting (AgProvider *provider, const gchar *key)
+{
+    GHashTable *settings;
+
+    g_return_val_if_fail (key != NULL, NULL);
+
+    settings = _ag_provider_load_default_settings (provider);
+    if (G_UNLIKELY (!settings))
+        return NULL;
+
+    return g_hash_table_lookup (settings, key);
+}
+
 /**
  * ag_provider_get_name:
  * @provider: the #AgProvider.
@@ -279,6 +345,8 @@ ag_provider_get_display_name (AgProvider *provider)
  * Get the description of the #AgProvider.
  *
  * Returns: the description of @provider, or %NULL upon failure.
+ *
+ * Since: 1.2
  */
 const gchar *
 ag_provider_get_description (AgProvider *provider)
@@ -295,6 +363,8 @@ ag_provider_get_description (AgProvider *provider)
  * can be used.
  *
  * Returns: a regular expression matching the domain names.
+ *
+ * Since: 1.1
  */
 const gchar *
 ag_provider_get_domains_regex (AgProvider *provider)
@@ -314,6 +384,8 @@ ag_provider_get_domains_regex (AgProvider *provider)
  * domains, this function will return %FALSE.
  *
  * Returns: %TRUE if the given domain is supported, %FALSE otherwise.
+ *
+ * Since: 1.2
  */
 gboolean
 ag_provider_match_domain (AgProvider *provider, const gchar *domain)
@@ -325,6 +397,27 @@ ag_provider_match_domain (AgProvider *provider, const gchar *domain)
         return FALSE;
 
     return g_regex_match_simple (provider->domains, domain, 0, 0);
+}
+
+/**
+ * ag_provider_get_plugin_name:
+ * @provider: the #AgProvider.
+ *
+ * Get the name of the account plugin which manages all accounts created from
+ * this #AgProvider.
+ * Some platforms might find it useful to store plugin names in the provider
+ * XML files, especially when the same plugin can work for different providers.
+ *
+ * Returns: the plugin name for @provider, or %NULL if a plugin name is not
+ * defined.
+ *
+ * Since: 1.5
+ */
+const gchar *
+ag_provider_get_plugin_name (AgProvider *provider)
+{
+    g_return_val_if_fail (provider != NULL, NULL);
+    return provider->plugin_name;
 }
 
 /**

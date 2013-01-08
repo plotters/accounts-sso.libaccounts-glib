@@ -66,35 +66,31 @@
  * for (list = services; list != NULL; list = list->next)
  * {
  *     AgAccountService *service = AG_ACCOUNT_SERVICE (list->data);
- *     GValue v_server = { 0, }, v_port = { 0, }, v_username = { 0, };
+ *     GVariant *v_server, *v_port, *v_username;
  *     gchar *server = NULL, *username = NULL;
  *     gint port;
- *     AgSettingSource src;
  *     AgAccount *account;
  *
- *     g_value_init (&v_server, G_TYPE_STRING);
- *     src = ag_account_service_get_value (service, "pop3/hostname", &v_server);
- *     if (src != AG_SETTING_SOURCE_NONE)
- *         server = g_value_get_string (&v_server);
+ *     v_server = ag_account_service_get_variant (service, "pop3/hostname", NULL);
+ *     if (v_server != NULL)
+ *         server = g_variant_dup_string (v_server, NULL);
  *
- *     g_value_init (&v_port, G_TYPE_INT);
- *     src = ag_account_service_get_value (service, "pop3/port", &v_port);
- *     if (src != AG_SETTING_SOURCE_NONE)
- *         port = g_value_get_string (&v_port);
+ *     v_port = ag_account_service_get_variant (service, "pop3/port", NULL);
+ *     if (v_port != NULL)
+ *         port = g_variant_get_int16 (&v_port);
  *
  *     // Suppose that the e-mail address is stored in the global account
  *     // settings; let's get it from there:
- *     g_value_init (&v_username, G_TYPE_STRING);
  *     account = ag_account_service_get_account (service);
- *     src = ag_account_get_value (service, "username", &v_username);
- *     if (src != AG_SETTING_SOURCE_NONE)
- *         username = g_value_get_string (&v_username);
+ *     ag_account_select_service (NULL);
+ *     v_username = ag_account_get_variant (account, "username", NULL);
+ *     if (v_username != NULL)
+ *         username = g_variant_dup_string (&v_username);
  *
  *     ...
  *
- *     g_value_unset (&v_username);
- *     g_value_unset (&v_port);
- *     g_value_unset (&v_server);
+ *     g_free (username);
+ *     g_free (server);
  * }
  *   </programlisting>
  * </example>
@@ -113,6 +109,8 @@
  * </note>
  */
 
+#define AG_DISABLE_DEPRECATION_WARNINGS
+
 #include "ag-account-service.h"
 #include "ag-errors.h"
 #include "ag-internals.h"
@@ -125,8 +123,12 @@ enum {
     PROP_0,
 
     PROP_ACCOUNT,
-    PROP_SERVICE
+    PROP_SERVICE,
+    PROP_ENABLED,
+    N_PROPERTIES
 };
+
+static GParamSpec *properties[N_PROPERTIES];
 
 struct _AgAccountServicePrivate {
     AgAccount *account;
@@ -170,7 +172,9 @@ check_enabled (AgAccountServicePrivate *priv)
 }
 
 static void
-account_watch_cb (AgAccount *account, const gchar *key, gpointer user_data)
+account_watch_cb (G_GNUC_UNUSED AgAccount *account,
+                  G_GNUC_UNUSED const gchar *key,
+                  gpointer user_data)
 {
     AgAccountService *self = (AgAccountService *)user_data;
 
@@ -178,7 +182,7 @@ account_watch_cb (AgAccount *account, const gchar *key, gpointer user_data)
 }
 
 static void
-on_account_enabled (AgAccount *account,
+on_account_enabled (G_GNUC_UNUSED AgAccount *account,
                     const gchar *service_name,
                     gboolean service_enabled,
                     AgAccountService *self)
@@ -193,6 +197,30 @@ on_account_enabled (AgAccount *account,
     {
         priv->enabled = enabled;
         g_signal_emit (self, signals[ENABLED], 0, enabled);
+        g_object_notify_by_pspec ((GObject *)self, properties[PROP_ENABLED]);
+    }
+}
+
+static void
+ag_account_service_get_property (GObject *object, guint property_id,
+                                 GValue *value, GParamSpec *pspec)
+{
+    AgAccountService *self = AG_ACCOUNT_SERVICE (object);
+
+    switch (property_id)
+    {
+    case PROP_ACCOUNT:
+        g_value_set_object (value, self->priv->account);
+        break;
+    case PROP_SERVICE:
+        g_value_set_boxed (value, self->priv->service);
+        break;
+    case PROP_ENABLED:
+        g_value_set_boolean (value, self->priv->enabled);
+        break;
+    default:
+        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
+        break;
     }
 }
 
@@ -274,20 +302,53 @@ ag_account_service_class_init(AgAccountServiceClass *klass)
 
     object_class->constructed = ag_account_service_constructed;
     object_class->dispose = ag_account_service_dispose;
+    object_class->get_property = ag_account_service_get_property;
     object_class->set_property = ag_account_service_set_property;
 
-    g_object_class_install_property
-        (object_class, PROP_ACCOUNT,
-         g_param_spec_object ("account", "account", "account",
-                              AG_TYPE_ACCOUNT,
-                              G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * AgAccountService:account:
+     *
+     * The #AgAccount used by the account service.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_ACCOUNT] =
+        g_param_spec_object ("account", "account", "account",
+                             AG_TYPE_ACCOUNT,
+                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
-    g_object_class_install_property
-        (object_class, PROP_SERVICE,
-         g_param_spec_boxed ("service", "service", "service",
-                             ag_service_get_type(),
-                             G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * AgAccountService:service:
+     *
+     * The #AgService used by the account service.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_SERVICE] =
+        g_param_spec_boxed ("service", "service", "service",
+                            ag_service_get_type(),
+                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
+    /**
+     * AgAccountService:enabled:
+     *
+     * Whether the account service is currently enabled. The value of
+     * this property is %TRUE if and only if the underlying #AgAccount
+     * is enabled and the selected #AgService is enabled on it. If this
+     * property is %FALSE, applications should not try to use this
+     * object.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_ENABLED] =
+        g_param_spec_boolean ("enabled", "Enabled",
+                              "Whether the account service is enabled",
+                              FALSE,
+                              G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+    g_object_class_install_properties (object_class,
+                                       N_PROPERTIES,
+                                       properties);
 
     /**
      * AgAccountService::changed:
@@ -419,6 +480,8 @@ ag_account_service_get_enabled (AgAccountService *self)
  * the setting is not present, %AG_SETTING_SOURCE_ACCOUNT if the setting comes
  * from the account configuration, or %AG_SETTING_SOURCE_PROFILE if the value
  * comes as predefined in the profile.
+ *
+ * Deprecated: 1.4: Use ag_account_service_get_variant() instead.
  */
 AgSettingSource
 ag_account_service_get_value (AgAccountService *self, const gchar *key,
@@ -441,6 +504,8 @@ ag_account_service_get_value (AgAccountService *self, const gchar *key,
  *
  * Sets the value of the configuration setting @key to the value @value.
  * If @value is %NULL, then the setting is unset.
+ *
+ * Deprecated: 1.4: Use ag_account_service_set_variant() instead.
  */
 void
 ag_account_service_set_value (AgAccountService *self, const gchar *key,
@@ -456,6 +521,62 @@ ag_account_service_set_value (AgAccountService *self, const gchar *key,
 }
 
 /**
+ * ag_account_service_get_variant:
+ * @self: the #AgAccountService.
+ * @key: the name of the setting to retrieve.
+ * @source: (allow-none) (out): a pointer to an
+ * #AgSettingSource variable which will tell whether the setting was
+ * retrieved from the accounts DB or from a service template.
+ *
+ * Gets the value of the configuration setting @key.
+ *
+ * Returns: (transfer none): a #GVariant holding the setting value, or
+ * %NULL. The returned #GVariant is owned by the account, and no guarantees
+ * are made about its lifetime. If the client wishes to keep it, it should
+ * call g_variant_ref() on it.
+ *
+ * Since: 1.4
+ */
+GVariant *
+ag_account_service_get_variant (AgAccountService *self, const gchar *key,
+                                AgSettingSource *source)
+{
+    AgAccountServicePrivate *priv;
+
+    g_return_val_if_fail (AG_IS_ACCOUNT_SERVICE (self), NULL);
+    priv = self->priv;
+
+    ag_account_select_service (priv->account, priv->service);
+    return ag_account_get_variant (priv->account, key, source);
+}
+
+/**
+ * ag_account_service_set_variant:
+ * @self: the #AgAccountService.
+ * @key: the name of the setting to change.
+ * @value: (allow-none): a #GVariant holding the new setting's value.
+ *
+ * Sets the value of the configuration setting @key to the value @value.
+ * If @value has a floating reference, the @account will take ownership
+ * of it.
+ * If @value is %NULL, then the setting is unset.
+ *
+ * Since: 1.4
+ */
+void
+ag_account_service_set_variant (AgAccountService *self, const gchar *key,
+                                GVariant *value)
+{
+    AgAccountServicePrivate *priv;
+
+    g_return_if_fail (AG_IS_ACCOUNT_SERVICE (self));
+    priv = self->priv;
+
+    ag_account_select_service (priv->account, priv->service);
+    ag_account_set_variant (priv->account, key, value);
+}
+
+/**
  * ag_account_service_settings_iter_init:
  * @self: the #AgAccountService.
  * @iter: an uninitialized #AgAccountSettingIter structure.
@@ -466,7 +587,7 @@ ag_account_service_set_value (AgAccountService *self, const gchar *key,
  * not %NULL, only keys whose names start with @key_prefix will be iterated
  * over.
  * After calling this method, one would typically call
- * ag_account_settings_iter_next() to read the settings one by one.
+ * ag_account_settings_iter_get_next() to read the settings one by one.
  */
 void
 ag_account_service_settings_iter_init (AgAccountService *self,
@@ -521,6 +642,8 @@ ag_account_service_get_settings_iter (AgAccountService *self,
  *
  * Returns: %TRUE if @key and @value have been set, %FALSE if we there are no
  * more account settings to iterate over.
+ *
+ * Deprecated: 1.4: Use ag_account_settings_iter_get_next() instead.
  */
 gboolean
 ag_account_service_settings_iter_next (AgAccountSettingIter *iter,

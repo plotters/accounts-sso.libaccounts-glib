@@ -23,12 +23,20 @@
  * 02110-1301 USA
  */
 
+#define AG_DISABLE_DEPRECATION_WARNINGS
+
 #include "libaccounts-glib/ag-account.h"
 #include "libaccounts-glib/ag-manager.h"
+#include "libaccounts-glib/ag-provider.h"
 #include "libaccounts-glib/ag-service.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if GLIB_CHECK_VERSION (2, 30, 0)
+#else
+#define G_VALUE_INIT { 0, { { 0 } } }
+#endif
 
 static gchar *gl_app_name = NULL;
 
@@ -146,7 +154,7 @@ get_account (gchar **argv)
 {
     AgManager *manager = NULL;
     AgAccount *account = NULL;
-    GValue value = { 0 };
+    GValue value = G_VALUE_INIT;
     GType type = 0;
     gchar *str = NULL;
     gchar **param = NULL;
@@ -341,7 +349,7 @@ get_service (gchar **argv)
     AgManager *manager = NULL;
     AgService *service = NULL;
     AgAccount *account = NULL;
-    GValue value = { 0 };
+    GValue value = G_VALUE_INIT;
     GType type = 0;
     gchar *str = NULL;
     gchar **param = NULL;
@@ -833,11 +841,11 @@ delete_account (gchar **argv)
     if (strcmp (argv[2], "all") == 0)
         list = ag_manager_list (manager);
     else
-        list = g_list_prepend (list, GINT_TO_POINTER (atoi (argv[2])));
+        list = g_list_prepend (list, GUINT_TO_POINTER (atoi (argv[2])));
 
     for (iter = list; iter != NULL; iter = g_list_next (iter))
     {
-        id = GPOINTER_TO_INT (iter->data);
+        id = GPOINTER_TO_UINT (iter->data);
         account = ag_manager_get_account (manager, id);
         if (account == NULL)
         {

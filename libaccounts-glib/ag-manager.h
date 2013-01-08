@@ -60,11 +60,6 @@ struct _AgManagerClass
     void (*_ag_reserved7) (void);
 };
 
-/**
- * AgManager:
- *
- * Use the accessor functions below.
- */
 struct _AgManager
 {
     GObject parent_instance;

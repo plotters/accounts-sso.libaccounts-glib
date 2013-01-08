@@ -84,7 +84,7 @@
  *     const gchar *provider_name;
  *     AgAccount *account;
  *
- *     main_loop = g_main_loop_new 9NULL, FALSE);
+ *     main_loop = g_main_loop_new (NULL, FALSE);
  *     manager = ag_manager_new ();
  *     providers = ag_manager_list_providers (manager);
  *     g_assert (providers != NULL);
@@ -106,6 +106,7 @@
 
 #include "ag-internals.h"
 #include "ag-marshal.h"
+#include "ag-provider.h"
 #include "ag-service.h"
 #include "ag-util.h"
 
@@ -123,7 +124,12 @@ enum
     PROP_MANAGER,
     PROP_PROVIDER,
     PROP_FOREIGN,
+    PROP_ENABLED,
+    PROP_DISPLAY_NAME,
+    N_PROPERTIES
 };
+
+static GParamSpec *properties[N_PROPERTIES];
 
 enum
 {
@@ -155,6 +161,7 @@ struct _AgAccountPrivate {
     /* selected service */
     AgService *service;
 
+    AgProvider *provider;
     gchar *provider_name;
     gchar *display_name;
 
@@ -178,6 +185,9 @@ struct _AgAccountPrivate {
      */
     GHashTable *changes_for_watches;
 
+    /* GSimpleAsyncResult for the ag_account_store_async operation. */
+    GSimpleAsyncResult *store_async_result;
+
     /* The "foreign" flag means that the account has been created by another
      * instance and we got informed about it from D-Bus. In this case, all the
      * informations that we get via D-Bus will be cached in the
@@ -200,7 +210,8 @@ typedef struct {
     AgAccount *account;
     GHashTableIter iter;
     gchar *key_prefix;
-    gpointer ptr2;
+    /* The next field is used by ag_account_settings_iter_next() only */
+    GValue *last_gvalue;
     gint stage;
     gint must_free_prefix;
 } RealIter;
@@ -210,6 +221,11 @@ typedef struct _AgSignature {
     gchar *token;
 } AgSignature;
 
+typedef struct {
+    AgAccountStoreCb callback;
+    gpointer user_data;
+} AsyncReadyCbWrapperData;
+
 #define AG_ITER_STAGE_UNSET     0
 #define AG_ITER_STAGE_ACCOUNT   1
 #define AG_ITER_STAGE_SERVICE   2
@@ -218,38 +234,65 @@ G_DEFINE_TYPE (AgAccount, ag_account, G_TYPE_OBJECT);
 
 #define AG_ACCOUNT_PRIV(obj) (AG_ACCOUNT(obj)->priv)
 
-DBusMessage *
+static inline gboolean
+ensure_has_provider (AgAccountPrivate *priv)
+{
+    if (priv->provider == NULL &&
+        priv->provider_name != NULL)
+    {
+        priv->provider = ag_manager_get_provider (priv->manager,
+                                                  priv->provider_name);
+    }
+
+    return priv->provider != NULL;
+}
+
+static void
+async_ready_cb_wrapper (GObject *object, GAsyncResult *res,
+                        gpointer user_data)
+{
+    AsyncReadyCbWrapperData *cb_data = user_data;
+    AgAccount *account = AG_ACCOUNT (object);
+    GError *error = NULL;
+
+    ag_account_store_finish (account, res, &error);
+    if (cb_data->callback != NULL)
+    {
+        cb_data->callback (account, error, cb_data->user_data);
+    }
+
+    g_clear_error (&error);
+    g_slice_free (AsyncReadyCbWrapperData, cb_data);
+}
+
+static void
+ag_variant_safe_unref (gpointer variant)
+{
+    if (variant != NULL)
+        g_variant_unref ((GVariant *)variant);
+}
+
+GVariant *
 _ag_account_build_signal (AgAccount *account, AgAccountChanges *changes,
                           const struct timespec *ts)
 {
-    DBusMessage *msg;
-    DBusMessageIter iter, i_serv, dict, i_struct, i_list;
-    gboolean ret;
+    GVariantBuilder builder;
     const gchar *provider_name;
 
-    /* The object path is not important here; it will be set to a valid
-     * value by the AgManager, when sending the signal. */
-    msg = dbus_message_new_signal ("/", AG_DBUS_IFACE,
-                                   AG_DBUS_SIG_CHANGED);
-    g_return_val_if_fail (msg != NULL, NULL);
+    g_variant_builder_init (&builder, G_VARIANT_TYPE_TUPLE);
 
     provider_name = account->priv->provider_name;
     if (!provider_name) provider_name = "";
 
-    ret = dbus_message_append_args (msg,
-                                    DBUS_TYPE_UINT32, &ts->tv_sec,
-                                    DBUS_TYPE_UINT32, &ts->tv_nsec,
-                                    DBUS_TYPE_UINT32, &account->id,
-                                    DBUS_TYPE_BOOLEAN, &changes->created,
-                                    DBUS_TYPE_BOOLEAN, &changes->deleted,
-                                    DBUS_TYPE_STRING, &provider_name,
-                                    DBUS_TYPE_INVALID);
-    if (G_UNLIKELY (!ret)) goto error;
+    g_variant_builder_add (&builder, "u", ts->tv_sec);
+    g_variant_builder_add (&builder, "u", ts->tv_nsec);
+    g_variant_builder_add (&builder, "u", account->id);
+    g_variant_builder_add (&builder, "b", changes->created);
+    g_variant_builder_add (&builder, "b", changes->deleted);
+    g_variant_builder_add (&builder, "s", provider_name);
 
     /* Append the settings */
-    dbus_message_iter_init_append (msg, &iter);
-    dbus_message_iter_open_container (&iter, DBUS_TYPE_ARRAY,
-                                      "(ssua{sv}as)", &i_serv);
+    g_variant_builder_open (&builder, G_VARIANT_TYPE ("a(ssua{sv}as)"));
     if (changes->services)
     {
         GHashTableIter iter;
@@ -263,58 +306,52 @@ _ag_account_build_signal (AgAccount *account, AgAccountChanges *changes,
             GSList *removed_keys = NULL;
             GHashTableIter si;
             gchar *key;
-            GValue *value;
+            GVariant *value;
             guint service_id;
 
-            dbus_message_iter_open_container (&i_serv, DBUS_TYPE_STRUCT,
-                                              NULL, &i_struct);
+            g_variant_builder_open (&builder,
+                                    G_VARIANT_TYPE ("(ssua{sv}as)"));
+
             /* Append the service name */
-            dbus_message_iter_append_basic (&i_struct, DBUS_TYPE_STRING,
-                                            &service_name);
+            g_variant_builder_add (&builder, "s", service_name);
             /* Append the service type */
-            dbus_message_iter_append_basic (&i_struct, DBUS_TYPE_STRING,
-                                            &sc->service_type);
+            g_variant_builder_add (&builder, "s", sc->service_type);
             /* Append the service id */
             if (sc->service == NULL)
                 service_id = 0;
             else
                 service_id = sc->service->id;
 
-            dbus_message_iter_append_basic (&i_struct, DBUS_TYPE_UINT32, &service_id);
+            g_variant_builder_add (&builder, "u", service_id);
             /* Append the dictionary of service settings */
-            dbus_message_iter_open_container (&i_struct, DBUS_TYPE_ARRAY,
-                                              "{sv}", &dict);
+            g_variant_builder_open (&builder, G_VARIANT_TYPE_VARDICT);
 
             g_hash_table_iter_init (&si, sc->settings);
             while (g_hash_table_iter_next (&si,
                                            (gpointer)&key, (gpointer)&value))
             {
                 if (value)
-                    _ag_iter_append_dict_entry (&dict, key, value);
+                    g_variant_builder_add (&builder, "{sv}", key, value);
                 else
                     removed_keys = g_slist_prepend (removed_keys, key);
             }
-            dbus_message_iter_close_container (&i_struct, &dict);
+            g_variant_builder_close (&builder);
 
             /* append the list of removed keys */
-            dbus_message_iter_open_container (&i_struct, DBUS_TYPE_ARRAY,
-                                              "s", &i_list);
+            g_variant_builder_open (&builder, G_VARIANT_TYPE_STRING_ARRAY);
             while (removed_keys)
             {
-                dbus_message_iter_append_basic (&i_list, DBUS_TYPE_STRING,
-                                                &removed_keys->data);
+                g_variant_builder_add (&builder, "s", removed_keys->data);
                 removed_keys = g_slist_delete_link (removed_keys, removed_keys);
             }
-            dbus_message_iter_close_container (&i_struct, &i_list);
-            dbus_message_iter_close_container (&i_serv, &i_struct);
+            g_variant_builder_close (&builder);
+
+            /* Close the service entry builder */
+            g_variant_builder_close (&builder);
         }
     }
-    dbus_message_iter_close_container (&iter, &i_serv);
-    return msg;
-
-error:
-    dbus_message_unref (msg);
-    return NULL;
+    g_variant_builder_close (&builder);
+    return g_variant_builder_end (&builder);
 }
 
 static void
@@ -385,7 +422,7 @@ static gboolean
 got_account_setting (sqlite3_stmt *stmt, GHashTable *settings)
 {
     gchar *key;
-    GValue *value;
+    GVariant *value;
 
     key = g_strdup ((gchar *)sqlite3_column_text (stmt, 0));
     g_return_val_if_fail (key != NULL, FALSE);
@@ -427,7 +464,7 @@ get_service_settings (AgAccountPrivate *priv, AgService *service,
         ss->service = service ? ag_service_ref (service) : NULL;
         ss->settings = g_hash_table_new_full
             (g_str_hash, g_str_equal,
-             g_free, (GDestroyNotify)_ag_value_slice_free);
+             g_free, ag_variant_safe_unref);
         g_hash_table_insert (priv->services, (gchar *)service_name, ss);
     }
 
@@ -438,7 +475,7 @@ static gboolean
 ag_account_changes_get_enabled (AgAccountChanges *changes, gboolean *enabled)
 {
     AgServiceChanges *sc;
-    const GValue *value;
+    GVariant *value;
 
     sc = g_hash_table_lookup (changes->services, SERVICE_GLOBAL);
     if (sc)
@@ -446,7 +483,7 @@ ag_account_changes_get_enabled (AgAccountChanges *changes, gboolean *enabled)
         value = g_hash_table_lookup (sc->settings, "enabled");
         if (value)
         {
-            *enabled = g_value_get_boolean (value);
+            *enabled = g_variant_get_boolean (value);
             return TRUE;
         }
     }
@@ -459,7 +496,7 @@ ag_account_changes_get_display_name (AgAccountChanges *changes,
                                      const gchar **display_name)
 {
     AgServiceChanges *sc;
-    const GValue *value;
+    GVariant *value;
 
     sc = g_hash_table_lookup (changes->services, SERVICE_GLOBAL);
     if (sc)
@@ -467,7 +504,7 @@ ag_account_changes_get_display_name (AgAccountChanges *changes,
         value = g_hash_table_lookup (sc->settings, "name");
         if (value)
         {
-            *display_name = g_value_get_string (value);
+            *display_name = g_variant_get_string (value, NULL);
             return TRUE;
         }
     }
@@ -500,8 +537,7 @@ _ag_account_changes_free (AgAccountChanges *changes)
 }
 
 static GList *
-match_watch_with_key (AgAccount *account, GHashTable *watches,
-                      const gchar *key, GList *watch_list)
+match_watch_with_key (GHashTable *watches, const gchar *key, GList *watch_list)
 {
     GHashTableIter iter;
     AgAccountWatch watch;
@@ -546,7 +582,7 @@ update_settings (AgAccount *account, GHashTable *services)
         AgServiceSettings *ss;
         GHashTableIter si;
         gchar *key;
-        GValue *value;
+        GVariant *value;
         GHashTable *watches = NULL;
 
         if (priv->foreign)
@@ -584,16 +620,20 @@ update_settings (AgAccount *account, GHashTable *services)
                 {
                     g_free (priv->display_name);
                     priv->display_name =
-                        value ? g_value_dup_string (value) : NULL;
+                        value ? g_variant_dup_string (value, NULL) : NULL;
                     g_signal_emit (account, signals[DISPLAY_NAME_CHANGED], 0);
+                    g_object_notify_by_pspec ((GObject *)account,
+                                              properties[PROP_DISPLAY_NAME]);
                     continue;
                 }
                 else if (strcmp (key, "enabled") == 0)
                 {
                     priv->enabled =
-                        value ? g_value_get_boolean (value) : FALSE;
+                        value ? g_variant_get_boolean (value) : FALSE;
                     g_signal_emit (account, signals[ENABLED], 0,
                                    service_name, priv->enabled);
+                    g_object_notify_by_pspec ((GObject *)account,
+                                              properties[PROP_ENABLED]);
                     continue;
                 }
             }
@@ -601,19 +641,18 @@ update_settings (AgAccount *account, GHashTable *services)
             if (value)
                 g_hash_table_replace (ss->settings,
                                       g_strdup (key),
-                                      _ag_value_slice_dup (value));
+                                      g_variant_ref (value));
             else
                 g_hash_table_remove (ss->settings, key);
 
             /* check for installed watches to be invoked */
             if (watches)
-                watch_list = match_watch_with_key (account, watches, key,
-                                                   watch_list);
+                watch_list = match_watch_with_key (watches, key, watch_list);
 
             if (strcmp (key, "enabled") == 0)
             {
                 gboolean enabled =
-                    value ? g_value_get_boolean (value) : FALSE;
+                    value ? g_variant_get_boolean (value) : FALSE;
                 g_signal_emit (account, signals[ENABLED], 0,
                                service_name, enabled);
             }
@@ -639,12 +678,12 @@ update_settings (AgAccount *account, GHashTable *services)
 }
 
 void
-_ag_account_store_completed (AgAccount *account, AgAccountChanges *changes,
-                             AgAccountStoreCb callback, const GError *error,
-                             gpointer user_data)
+_ag_account_store_completed (AgAccount *account, AgAccountChanges *changes)
 {
-    if (callback)
-        callback (account, error, user_data);
+    AgAccountPrivate *priv = account->priv;
+
+    g_simple_async_result_complete_in_idle (priv->store_async_result);
+    g_clear_object (&priv->store_async_result);
 
     _ag_account_changes_free (changes);
 }
@@ -671,6 +710,8 @@ _ag_account_done_changes (AgAccount *account, AgAccountChanges *changes)
         priv->deleted = TRUE;
         priv->enabled = FALSE;
         g_signal_emit (account, signals[ENABLED], 0, NULL, FALSE);
+        g_object_notify_by_pspec ((GObject *)account,
+                                  properties[PROP_ENABLED]);
         g_signal_emit (account, signals[DELETED], 0);
     }
 }
@@ -720,7 +761,7 @@ account_service_changes_get (AgAccountPrivate *priv, AgService *service,
 
         sc->settings = g_hash_table_new_full
             (g_str_hash, g_str_equal,
-            g_free, (GDestroyNotify)_ag_value_slice_free);
+            g_free, ag_variant_safe_unref);
         g_hash_table_insert (changes->services, service_name, sc);
     }
 
@@ -749,17 +790,18 @@ _ag_account_get_service_changes (AgAccount *account, AgService *service)
 
 static void
 change_service_value (AgAccountPrivate *priv, AgService *service,
-                      const gchar *key, const GValue *value)
+                      const gchar *key, GVariant *value)
 {
     AgServiceChanges *sc;
     sc = account_service_changes_get (priv, service, FALSE);
     g_hash_table_insert (sc->settings,
-                         g_strdup (key), _ag_value_slice_dup (value));
+                         g_strdup (key),
+                         value ? g_variant_ref_sink (value) : NULL);
 }
 
 static inline void
 change_selected_service_value (AgAccountPrivate *priv,
-                               const gchar *key, const GValue *value)
+                               const gchar *key, GVariant *value)
 {
     change_service_value(priv, priv->service, key, value);
 }
@@ -852,6 +894,18 @@ ag_account_get_property (GObject *object, guint property_id,
     case PROP_ID:
         g_value_set_uint (value, account->id);
         break;
+    case PROP_MANAGER:
+        g_value_set_object (value, account->priv->manager);
+        break;
+    case PROP_PROVIDER:
+        g_value_set_string (value, account->priv->provider_name);
+        break;
+    case PROP_ENABLED:
+        g_value_set_boolean (value, account->priv->enabled);
+        break;
+    case PROP_DISPLAY_NAME:
+        g_value_set_string (value, account->priv->display_name);
+        break;
     default:
         G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
         break;
@@ -908,6 +962,12 @@ ag_account_dispose (GObject *object)
         priv->watches = NULL;
     }
 
+    if (priv->provider)
+    {
+        ag_provider_unref (priv->provider);
+        priv->provider = NULL;
+    }
+
     if (priv->manager)
     {
         g_object_unref (priv->manager);
@@ -955,33 +1015,73 @@ ag_account_class_init (AgAccountClass *klass)
      *
      * The AgAccountId for the account.
      */
-    g_object_class_install_property
-        (object_class, PROP_ID,
-         g_param_spec_uint ("id", "Account ID",
-                            "The AgAccountId of the account",
-                            0, G_MAXUINT, 0,
-                            G_PARAM_STATIC_STRINGS |
-                            G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY));
+    properties[PROP_ID] =
+        g_param_spec_uint ("id", "Account ID",
+                           "The AgAccountId of the account",
+                           0, G_MAXUINT, 0,
+                           G_PARAM_STATIC_STRINGS |
+                           G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
-    g_object_class_install_property
-        (object_class, PROP_MANAGER,
-         g_param_spec_object ("manager", "manager", "manager",
-                              AG_TYPE_MANAGER,
-                              G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY));
+    /**
+     * AgAccount:manager:
+     *
+     * The #AgManager from which the account was instantiated.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_MANAGER] =
+        g_param_spec_object ("manager", "manager", "manager",
+                             AG_TYPE_MANAGER,
+                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY);
 
-    g_object_class_install_property
-        (object_class, PROP_PROVIDER,
-         g_param_spec_string ("provider", "provider", "provider",
-                              NULL,
+    /**
+     * AgAccount:provider:
+     *
+     * The ID of the provider for the account.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_PROVIDER] =
+        g_param_spec_string ("provider", "provider", "provider",
+                             NULL,
+                             G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY |
+                             G_PARAM_STATIC_STRINGS);
+
+    properties[PROP_FOREIGN] =
+        g_param_spec_boolean ("foreign", "foreign", "foreign",
+                              FALSE,
                               G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY |
-                              G_PARAM_STATIC_STRINGS));
+                              G_PARAM_STATIC_STRINGS);
 
-    g_object_class_install_property
-        (object_class, PROP_FOREIGN,
-         g_param_spec_boolean ("foreign", "foreign", "foreign",
-                               FALSE,
-                               G_PARAM_WRITABLE | G_PARAM_CONSTRUCT_ONLY |
-                               G_PARAM_STATIC_STRINGS));
+    /**
+     * AgAccount:enabled:
+     *
+     * Whether the account is currently enabled.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_ENABLED] =
+        g_param_spec_boolean ("enabled", "Enabled",
+                              "Whether the account is enabled",
+                              FALSE,
+                              G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+    /**
+     * AgAccount:display-name:
+     *
+     * The display name of the account.
+     *
+     * Since: 1.4
+     */
+    properties[PROP_DISPLAY_NAME] =
+        g_param_spec_string ("display-name", "Display name",
+                             "The display name of the account",
+                             NULL,
+                             G_PARAM_READABLE | G_PARAM_STATIC_STRINGS);
+
+    g_object_class_install_properties (object_class,
+                                       N_PROPERTIES,
+                                       properties);
 
     /**
      * AgAccount::enabled:
@@ -1033,12 +1133,13 @@ ag_account_class_init (AgAccountClass *klass)
 }
 
 AgAccountChanges *
-_ag_account_changes_from_dbus (AgManager *manager, DBusMessageIter *iter,
+_ag_account_changes_from_dbus (AgManager *manager, GVariant *v_services,
                                gboolean created, gboolean deleted)
 {
     AgAccountChanges *changes;
     AgServiceChanges *sc;
-    DBusMessageIter i_serv, i_struct, i_dict, i_list;
+    GVariantIter i_serv, i_dict, i_list;
+    GVariant *changed_keys, *removed_keys;
     gchar *service_name;
     gchar *service_type;
     gint service_id;
@@ -1047,38 +1148,22 @@ _ag_account_changes_from_dbus (AgManager *manager, DBusMessageIter *iter,
     changes->created = created;
     changes->deleted = deleted;
     changes->services =
-        g_hash_table_new_full (g_str_hash, g_str_equal, NULL,
+        g_hash_table_new_full (g_str_hash, g_str_equal, g_free,
                                (GDestroyNotify)ag_service_changes_free);
 
-    /* TODO: parse the settings */
-#define EXPECT_TYPE(i, t) \
-    if (G_UNLIKELY (dbus_message_iter_get_arg_type (i) != t)) \
-    { \
-        DEBUG_INFO ("%s expected (%c), got (%c)", G_STRLOC, \
-                    t, dbus_message_iter_get_arg_type (i)); \
-        goto error; \
-    }
+    /* parse the settings */
+    g_variant_iter_init (&i_serv, v_services);
 
-    EXPECT_TYPE (iter, DBUS_TYPE_ARRAY);
-    dbus_message_iter_recurse (iter, &i_serv);
-
-    /* iterate the array of "ssa{sv}as", each one holds one service */
-    while (dbus_message_iter_get_arg_type (&i_serv) != DBUS_TYPE_INVALID)
+    /* iterate the array, each element holds one service */
+    while (g_variant_iter_next (&i_serv, "(ssu@a{sv}@as)",
+                                &service_name,
+                                &service_type,
+                                &service_id,
+                                &changed_keys,
+                                &removed_keys))
     {
-        EXPECT_TYPE (&i_serv, DBUS_TYPE_STRUCT);
-        dbus_message_iter_recurse (&i_serv, &i_struct);
-
-        EXPECT_TYPE (&i_struct, DBUS_TYPE_STRING);
-        dbus_message_iter_get_basic (&i_struct, &service_name);
-        dbus_message_iter_next (&i_struct);
-
-        EXPECT_TYPE (&i_struct, DBUS_TYPE_STRING);
-        dbus_message_iter_get_basic (&i_struct, &service_type);
-        dbus_message_iter_next (&i_struct);
-
-        EXPECT_TYPE (&i_struct, DBUS_TYPE_UINT32);
-        dbus_message_iter_get_basic (&i_struct, &service_id);
-        dbus_message_iter_next (&i_struct);
+        GVariant *variant;
+        gchar *key;
 
         sc = g_slice_new0 (AgServiceChanges);
         if (service_name != NULL && strcmp (service_name, SERVICE_GLOBAL) == 0)
@@ -1087,62 +1172,39 @@ _ag_account_changes_from_dbus (AgManager *manager, DBusMessageIter *iter,
             sc->service = _ag_manager_get_service_lazy (manager, service_name,
                                                         service_type,
                                                         service_id);
-        sc->service_type = g_strdup (service_type);
+        sc->service_type = service_type;
 
         sc->settings = g_hash_table_new_full
             (g_str_hash, g_str_equal,
-             g_free, (GDestroyNotify)_ag_value_slice_free);
+             g_free, ag_variant_safe_unref);
         g_hash_table_insert (changes->services, service_name, sc);
 
-        EXPECT_TYPE (&i_struct, DBUS_TYPE_ARRAY);
-        dbus_message_iter_recurse (&i_struct, &i_dict);
-
         /* iterate the "a{sv}" of settings */
-        while (dbus_message_iter_get_arg_type (&i_dict) != DBUS_TYPE_INVALID)
+        g_variant_iter_init (&i_dict, changed_keys);
+        while (g_variant_iter_next (&i_dict, "{sv}", &key, &variant))
         {
-            const gchar *key;
-            GValue value = { 0 };
-
-            EXPECT_TYPE (&i_dict, DBUS_TYPE_DICT_ENTRY);
-            if (_ag_iter_get_dict_entry (&i_dict, &key, &value))
-            {
-                g_hash_table_insert (sc->settings, g_strdup (key),
-                                     g_slice_dup (GValue, &value));
-            }
-            dbus_message_iter_next (&i_dict);
+            g_hash_table_insert (sc->settings, key, variant);
         }
-        dbus_message_iter_next (&i_struct);
-
-        EXPECT_TYPE (&i_struct, DBUS_TYPE_ARRAY);
-        dbus_message_iter_recurse (&i_struct, &i_list);
+        g_variant_unref (changed_keys);
 
         /* iterate the "as" of removed settings */
-        while (dbus_message_iter_get_arg_type (&i_list) != DBUS_TYPE_INVALID)
+        g_variant_iter_init (&i_list, removed_keys);
+        while (g_variant_iter_next (&i_list, "s", &key))
         {
-            const gchar *key;
-            EXPECT_TYPE (&i_list, DBUS_TYPE_STRING);
-            dbus_message_iter_get_basic (&i_list, &key);
-            g_hash_table_insert (sc->settings, g_strdup (key), NULL);
-            dbus_message_iter_next (&i_list);
+            g_hash_table_insert (sc->settings, key, NULL);
         }
 
-        dbus_message_iter_next (&i_serv);
+        g_variant_unref (removed_keys);
     }
 
-#undef EXPECT_TYPE
     return changes;
-
-error:
-    g_warning ("Wrong format of D-Bus message");
-    g_slice_free(AgAccountChanges, changes);
-    return NULL;
 }
 
 static void
 add_service_type (GPtrArray *types, const gchar *service_type)
 {
     gboolean found = FALSE;
-    gint i;
+    guint i;
 
     /* if the service type is not yet in the list, add it */
     for (i = 0; i < types->len; i++)
@@ -1384,22 +1446,22 @@ ag_account_get_store_sql (AgAccount *account, GError **error)
             while (g_hash_table_iter_next (&i_settings, &ht_key, &ht_value))
             {
                 const gchar *key = ht_key;
-                const GValue *value = ht_value;
+                GVariant *value = ht_value;
 
                 if (value)
                 {
-                    const gchar *type_str;
+                    const GVariantType *type_str;
                     gchar *value_str;
 
                     value_str = _ag_value_to_db (value, FALSE);
-                    type_str = _ag_type_from_g_type (G_VALUE_TYPE (value));
+                    type_str = g_variant_get_type (value);
                     _ag_string_append_printf
                         (sql,
                          "INSERT OR REPLACE INTO Settings (account, service,"
                                                           "key, type, value) "
                          "VALUES (%s, %s, %Q, %Q, %Q);",
                          account_id_str, service_id_str, key,
-                         type_str, value_str);
+                         (const gchar *)type_str, value_str);
                     g_free (value_str);
                 }
                 else if (account->id != 0)
@@ -1555,7 +1617,7 @@ list_enabled_services_from_memory (AgAccountPrivate *priv,
     g_hash_table_iter_init (&iter, priv->services);
     while (g_hash_table_iter_next (&iter, NULL, (gpointer)&ss))
     {
-        GValue *value;
+        GVariant *value;
 
         if (ss->service == NULL) continue;
 
@@ -1564,7 +1626,7 @@ list_enabled_services_from_memory (AgAccountPrivate *priv,
                 continue;
 
         value = g_hash_table_lookup (ss->settings, "enabled");
-        if (value != NULL && g_value_get_boolean (value))
+        if (value != NULL && g_variant_get_boolean (value))
             list = g_list_prepend (list, ag_service_ref(ss->service));
     }
     return list;
@@ -1573,7 +1635,11 @@ list_enabled_services_from_memory (AgAccountPrivate *priv,
 static AgAccountSettingIter *
 ag_account_settings_iter_copy(const AgAccountSettingIter *orig)
 {
-    return g_slice_dup (AgAccountSettingIter, orig);
+    RealIter *copy;
+
+    copy = (RealIter *)g_slice_dup (AgAccountSettingIter, orig);
+    copy->last_gvalue = NULL;
+    return (AgAccountSettingIter *)copy;
 }
 
 G_DEFINE_BOXED_TYPE (AgAccountSettingIter, ag_account_settings_iter,
@@ -1613,6 +1679,8 @@ _ag_account_settings_iter_init (AgAccount *account,
         g_hash_table_iter_init (&ri->iter, ss->settings);
         ri->stage = AG_ITER_STAGE_ACCOUNT;
     }
+
+    ri->last_gvalue = NULL;
 }
 
 /**
@@ -1738,13 +1806,10 @@ ag_account_get_display_name (AgAccount *account)
 void
 ag_account_set_display_name (AgAccount *account, const gchar *display_name)
 {
-    GValue value = { 0 };
-
     g_return_if_fail (AG_IS_ACCOUNT (account));
 
-    g_value_init (&value, G_TYPE_STRING);
-    g_value_set_static_string (&value, display_name);
-    change_service_value (account->priv, NULL, "name", &value);
+    change_service_value (account->priv, NULL, "name",
+                          g_variant_new_string (display_name));
 }
 
 /**
@@ -1826,7 +1891,7 @@ ag_account_get_enabled (AgAccount *account)
     AgAccountPrivate *priv;
     gboolean ret = FALSE;
     AgServiceSettings *ss;
-    GValue *val;
+    GVariant *val;
 
     g_return_val_if_fail (AG_IS_ACCOUNT (account), FALSE);
     priv = account->priv;
@@ -1841,7 +1906,7 @@ ag_account_get_enabled (AgAccount *account)
         if (ss)
         {
             val = g_hash_table_lookup (ss->settings, "enabled");
-            ret = val ? g_value_get_boolean (val) : FALSE;
+            ret = val ? g_variant_get_boolean (val) : FALSE;
         }
     }
     return ret;
@@ -1857,13 +1922,10 @@ ag_account_get_enabled (AgAccount *account)
 void
 ag_account_set_enabled (AgAccount *account, gboolean enabled)
 {
-    GValue value = { 0 };
-
     g_return_if_fail (AG_IS_ACCOUNT (account));
 
-    g_value_init (&value, G_TYPE_BOOLEAN);
-    g_value_set_boolean (&value, enabled);
-    change_selected_service_value (account->priv, "enabled", &value);
+    change_selected_service_value (account->priv, "enabled",
+                                   g_variant_new_boolean (enabled));
 }
 
 /**
@@ -1897,38 +1959,29 @@ ag_account_delete (AgAccount *account)
  * not present, %AG_SETTING_SOURCE_ACCOUNT if the setting comes from the
  * account configuration, or %AG_SETTING_SOURCE_PROFILE if the value comes as
  * predefined in the profile.
+ *
+ * Deprecated: 1.4: Use ag_account_get_variant() instead.
  */
 AgSettingSource
 ag_account_get_value (AgAccount *account, const gchar *key,
                       GValue *value)
 {
-    AgAccountPrivate *priv;
-    AgServiceSettings *ss;
     AgSettingSource source;
-    const GValue *val = NULL;
+    GValue val = G_VALUE_INIT;
+    GVariant *variant;
 
     g_return_val_if_fail (AG_IS_ACCOUNT (account), AG_SETTING_SOURCE_NONE);
-    priv = account->priv;
 
-    ss = get_service_settings (priv, priv->service, FALSE);
-    if (ss)
-    {
-        val = g_hash_table_lookup (ss->settings, key);
-        source = AG_SETTING_SOURCE_ACCOUNT;
-    }
+    variant = ag_account_get_variant (account, key, &source);
 
-    if (!val && priv->service)
+    if (variant != NULL)
     {
-        val = _ag_service_get_default_setting (priv->service, key);
-        source = AG_SETTING_SOURCE_PROFILE;
-    }
-
-    if (val)
-    {
-        if (G_VALUE_TYPE (val) == G_VALUE_TYPE (value))
-            g_value_copy (val, value);
+        _ag_value_from_variant (&val, variant);
+        if (G_VALUE_TYPE (&val) == G_VALUE_TYPE (value))
+            g_value_copy (&val, value);
         else
-            g_value_transform (val, value);
+            g_value_transform (&val, value);
+        g_value_unset (&val);
         return source;
     }
 
@@ -1943,10 +1996,106 @@ ag_account_get_value (AgAccount *account, const gchar *key,
  *
  * Sets the value of the configuration setting @key to the value @value.
  * If @value is %NULL, then the setting is unset.
+ *
+ * Deprecated: 1.4: Use ag_account_set_variant() instead.
  */
 void
 ag_account_set_value (AgAccount *account, const gchar *key,
                       const GValue *value)
+{
+    AgAccountPrivate *priv;
+    GVariant *variant;
+
+    g_return_if_fail (AG_IS_ACCOUNT (account));
+    priv = account->priv;
+
+    if (value != NULL)
+    {
+        variant = _ag_value_to_variant (value);
+        g_return_if_fail (variant != NULL);
+    }
+    else
+    {
+        variant = NULL;
+    }
+
+    change_selected_service_value (priv, key, variant);
+}
+
+/**
+ * ag_account_get_variant:
+ * @account: the #AgAccount.
+ * @key: the name of the setting to retrieve.
+ * @source: (allow-none) (out): a pointer to an
+ * #AgSettingSource variable which will tell whether the setting was
+ * retrieved from the accounts DB or from a service template.
+ *
+ * Gets the value of the configuration setting @key.
+ *
+ * Returns: (transfer none): a #GVariant holding the setting value, or
+ * %NULL. The returned #GVariant is owned by the account, and no guarantees
+ * are made about its lifetime. If the client wishes to keep it, it should
+ * call g_variant_ref() on it.
+ *
+ * Since: 1.4
+ */
+GVariant *
+ag_account_get_variant (AgAccount *account, const gchar *key,
+                        AgSettingSource *source)
+{
+    AgAccountPrivate *priv;
+    AgServiceSettings *ss;
+    GVariant *value = NULL;
+
+    g_return_val_if_fail (AG_IS_ACCOUNT (account), NULL);
+    priv = account->priv;
+
+    ss = get_service_settings (priv, priv->service, FALSE);
+    if (ss)
+    {
+        value = g_hash_table_lookup (ss->settings, key);
+        if (value != NULL)
+        {
+            if (source) *source = AG_SETTING_SOURCE_ACCOUNT;
+            return value;
+        }
+    }
+
+    if (priv->service)
+    {
+        value = _ag_service_get_default_setting (priv->service, key);
+    }
+    else if (ensure_has_provider (priv))
+    {
+        value = _ag_provider_get_default_setting (priv->provider, key);
+    }
+
+    if (value != NULL)
+    {
+        if (source) *source = AG_SETTING_SOURCE_PROFILE;
+        return value;
+    }
+
+    if (source) *source = AG_SETTING_SOURCE_NONE;
+    return NULL;
+}
+
+/**
+ * ag_account_set_variant:
+ * @account: the #AgAccount.
+ * @key: the name of the setting to change.
+ * @value: (allow-none): a #GVariant holding the new setting's value.
+ *
+ * Sets the value of the configuration setting @key to the value @value.
+ * If @value has a floating reference, the @account will take ownership
+ * of it.
+ * If @value is %NULL, then the setting is unset.
+ *
+ * Since: 1.4
+ */
+void
+ag_account_set_variant (AgAccount *account, const gchar *key,
+                        GVariant *value)
 {
     AgAccountPrivate *priv;
 
@@ -1989,6 +2138,8 @@ ag_account_settings_iter_free (AgAccountSettingIter *iter)
     RealIter *ri = (RealIter *)iter;
     if (ri->must_free_prefix)
         g_free (ri->key_prefix);
+    if (ri->last_gvalue != NULL)
+        _ag_value_slice_free (ri->last_gvalue);
     g_slice_free (AgAccountSettingIter, iter);
 }
 
@@ -2024,10 +2175,66 @@ ag_account_settings_iter_init (AgAccount *account,
  *
  * Returns: %TRUE if @key and @value have been set, %FALSE if we there are no
  * more account settings to iterate over.
+ *
+ * Deprecated: 1.4: Use ag_account_settings_iter_get_next() instead.
  */
 gboolean
 ag_account_settings_iter_next (AgAccountSettingIter *iter,
                                const gchar **key, const GValue **value)
+{
+    RealIter *ri = (RealIter *)iter;
+    GVariant *variant;
+    GValue *val;
+    gboolean ok;
+
+    /* Since AgAccount internally operates with GVariants, we need to
+     * allocate a new GValue. The client, however, won't free it, so we
+     * free it ourselves the next time that this function is called, or
+     * when the iterator is freed.
+     * NOTE: It's still possible that the GValue is leaked if the
+     * AgAccountSettingIter was allocated on the stack and the loop was
+     * interrupted before ag_account_settings_iter_next() returned
+     * FALSE; however, this is not common (and we hope that clients
+     * will soon migrate to the new GVariant API. */
+    if (ri->last_gvalue != NULL)
+    {
+        _ag_value_slice_free (ri->last_gvalue);
+        ri->last_gvalue = NULL;
+    }
+
+    ok = ag_account_settings_iter_get_next (iter, key, &variant);
+    if (!ok)
+    {
+        *value = NULL;
+        return FALSE;
+    }
+
+    val = g_slice_new0 (GValue);
+    _ag_value_from_variant (val, variant);
+    ri->last_gvalue = val;
+    *value = val;
+    return TRUE;
+}
+
+/**
+ * ag_account_settings_iter_get_next:
+ * @iter: an initialized #AgAccountSettingIter structure.
+ * @key: (out callee-allocates) (transfer none): a pointer to a string
+ * receiving the key name.
+ * @value: (out callee-allocates) (transfer none): a pointer to a pointer to a
+ * #GVariant, to receive the key value.
+ *
+ * Iterates over the account keys. @iter must be an iterator previously
+ * initialized with ag_account_settings_iter_init().
+ *
+ * Returns: %TRUE if @key and @value have been set, %FALSE if we there are no
+ * more account settings to iterate over.
+ *
+ * Since: 1.4
+ */
+gboolean
+ag_account_settings_iter_get_next (AgAccountSettingIter *iter,
+                                   const gchar **key, GVariant **value)
 {
     RealIter *ri = (RealIter *)iter;
     AgServiceSettings *ss;
@@ -2055,19 +2262,20 @@ ag_account_settings_iter_next (AgAccountSettingIter *iter,
         ri->stage = AG_ITER_STAGE_UNSET;
     }
 
-    if (!priv->service)
-    {
-        *key = NULL;
-        *value = NULL;
-        return FALSE;
-    }
-
     if (ri->stage == AG_ITER_STAGE_UNSET)
     {
-        GHashTable *settings;
+        GHashTable *settings = NULL;
 
-        settings = _ag_service_load_default_settings (priv->service);
-        if (!settings) return FALSE;
+        if (priv->service != NULL)
+        {
+            settings = _ag_service_load_default_settings (priv->service);
+        }
+        else if (ensure_has_provider (priv))
+        {
+            settings = _ag_provider_load_default_settings (priv->provider);
+        }
+
+        if (!settings) goto finish;
 
         g_hash_table_iter_init (&ri->iter, settings);
         ri->stage = AG_ITER_STAGE_SERVICE;
@@ -2089,6 +2297,7 @@ ag_account_settings_iter_next (AgAccountSettingIter *iter,
         return TRUE;
     }
 
+finish:
     *key = NULL;
     *value = NULL;
     return FALSE;
@@ -2204,12 +2413,41 @@ ag_account_remove_watch (AgAccount *account, AgAccountWatch watch)
  * written.
  * @user_data: pointer to user data, to be passed to @callback.
  *
- * Store the account settings which have been changed into the account
- * database, and invoke @callback when the operation has been completed.
+ * Commit the changed account settings to the account database, and invoke
+ * @callback when the operation has been completed.
+ *
+ * Deprecated: 1.4: Use ag_account_store_async() instead.
  */
 void
 ag_account_store (AgAccount *account, AgAccountStoreCb callback,
                   gpointer user_data)
+{
+    AsyncReadyCbWrapperData *cb_data;
+
+    g_return_if_fail (AG_IS_ACCOUNT (account));
+
+    cb_data = g_slice_new (AsyncReadyCbWrapperData);
+    cb_data->callback = callback;
+    cb_data->user_data = user_data;
+    ag_account_store_async (account, NULL, async_ready_cb_wrapper, cb_data);
+}
+
+/**
+ * ag_account_store_async:
+ * @account: the #AgAccount.
+ * @cancellable: (allow-none): optional #GCancellable object, %NULL to ignore.
+ * @callback: (scope async): function to be called when the settings have been
+ * written.
+ * @user_data: pointer to user data, to be passed to @callback.
+ *
+ * Commit the changed account settings to the account database, and invoke
+ * @callback when the operation has been completed.
+ *
+ * Since: 1.4
+ */
+void
+ag_account_store_async (AgAccount *account, GCancellable *cancellable,
+                        GAsyncReadyCallback callback, gpointer user_data)
 {
     AgAccountPrivate *priv;
     AgAccountChanges *changes;
@@ -2219,15 +2457,32 @@ ag_account_store (AgAccount *account, AgAccountStoreCb callback,
     g_return_if_fail (AG_IS_ACCOUNT (account));
     priv = account->priv;
 
+    if (G_UNLIKELY (priv->store_async_result != NULL))
+    {
+        g_critical ("ag_account_store_async called again before completion");
+        g_simple_async_report_error_in_idle ((GObject *)account,
+                                             callback, user_data,
+                                             AG_ACCOUNTS_ERROR,
+                                             AG_ACCOUNTS_ERROR_STORE_IN_PROGRESS,
+                                             "Store operation already "
+                                             "in progress");
+        return;
+    }
+
+    priv->store_async_result =
+        g_simple_async_result_new ((GObject *)account,
+                                   callback, user_data,
+                                   ag_account_store_async);
+    g_simple_async_result_set_check_cancellable (priv->store_async_result,
+                                                 cancellable);
+
     sql = ag_account_get_store_sql (account, &error);
     if (G_UNLIKELY (error))
     {
-        if (callback)
-            callback (account, error, user_data);
-        else
-            g_warning ("%s: %s", G_STRFUNC, error->message);
-
-        g_error_free (error);
+        g_simple_async_result_take_error (priv->store_async_result,
+                                          error);
+        g_simple_async_result_complete_in_idle (priv->store_async_result);
+        g_clear_object (&priv->store_async_result);
         return;
     }
 
@@ -2237,14 +2492,39 @@ ag_account_store (AgAccount *account, AgAccountStoreCb callback,
     if (G_UNLIKELY (!sql))
     {
         /* Nothing to do: invoke the callback immediately */
-        if (callback)
-            callback (account, NULL, user_data);
+        g_simple_async_result_complete_in_idle (priv->store_async_result);
+        g_clear_object (&priv->store_async_result);
         return;
     }
 
     _ag_manager_exec_transaction (priv->manager, sql, changes, account,
-                                  callback, user_data);
+                                  priv->store_async_result, cancellable);
     g_free (sql);
+}
+
+/**
+ * ag_account_store_finish:
+ * @account: the #AgAccount.
+ * @res: A #GAsyncResult obtained from the #GAsyncReadyCallback passed to
+ * ag_account_store_async().
+ * @error: return location for error, or %NULL.
+ *
+ * Finishes the store operation started by ag_account_store_async().
+ *
+ * Returns: %TRUE on success, %FALSE otherwise.
+ *
+ * Since: 1.4
+ */
+gboolean
+ag_account_store_finish (AgAccount *account, GAsyncResult *res,
+                         GError **error)
+{
+    GSimpleAsyncResult *async_result;
+
+    g_return_val_if_fail (AG_IS_ACCOUNT (account), FALSE);
+
+    async_result = (GSimpleAsyncResult *)res;
+    return !g_simple_async_result_propagate_error (async_result, error);
 }
 
 /**
@@ -2252,8 +2532,8 @@ ag_account_store (AgAccount *account, AgAccountStoreCb callback,
  * @account: the #AgAccount.
  * @error: pointer to receive the #GError, or %NULL.
  *
- * Store the account settings which have been changed into the account
- * database. This function does not return until the operation has completed.
+ * Commit the changed account settings to the account database, and invoke
+ * @callback when the operation has been completed.
  *
  * Returns: %TRUE on success, %FALSE on failure.
  */
@@ -2312,7 +2592,9 @@ ag_account_store_blocking (AgAccount *account, GError **error)
  * stored prior to calling this function.
  */
 void
-ag_account_sign (AgAccount *account, const gchar *key, const gchar *token)
+ag_account_sign (G_GNUC_UNUSED AgAccount *account,
+                 G_GNUC_UNUSED const gchar *key,
+                 G_GNUC_UNUSED const gchar *token)
 {
     g_warning ("ag_account_sign: no encryptor supported.");
 }
@@ -2330,7 +2612,9 @@ ag_account_sign (AgAccount *account, const gchar *key, const gchar *token)
  * %FALSE otherwise.
  */
 gboolean
-ag_account_verify (AgAccount *account, const gchar *key, const gchar **token)
+ag_account_verify (G_GNUC_UNUSED AgAccount *account,
+                   G_GNUC_UNUSED const gchar *key,
+                   G_GNUC_UNUSED const gchar **token)
 {
     g_warning ("ag_account_verify: no encryptor supported.");
     return FALSE;

@@ -1,120 +1,166 @@
 dnl Process this file with autoconf to produce a configure script.
+AC_PREREQ([2.64])
+AC_INIT([libaccounts-glib],
+        [1.4],
+        [http://code.google.com/p/accounts-sso/issues/entry],
+        [libaccounts-glib],
+        [http://code.google.com/p/accounts-sso/])
 
-AC_INIT(libaccounts-glib, 1.2)
+AC_CONFIG_AUX_DIR([build-aux])
+AC_CONFIG_HEADERS([config.h])
+AC_CONFIG_SRCDIR([libaccounts-glib.pc.in])
+AC_CONFIG_MACRO_DIR([m4])
 
-AM_INIT_AUTOMAKE(AC_PACKAGE_NAME, AC_PACKAGE_VERSION)
-AM_CONFIG_HEADER(config.h)
+AM_INIT_AUTOMAKE([1.11 -Wall nostdinc silent-rules subdir-objects])
+
+AC_PROG_CC
+AC_PROG_CC_STDC
+AM_PROG_CC_C_O
+
+LT_PREREQ([2.2])
+LT_INIT([disable-static])
 
 # Gobject Introspection
-AC_CONFIG_MACRO_DIR([m4])
 GOBJECT_INTROSPECTION_CHECK([1.30.0])
 
 PKG_CHECK_MODULES(
-	LIBACCOUNTS,
-	dbus-1
-	dbus-glib-1
-	glib-2.0 >= 2.26
-	gio-2.0 >= 2.30
-	gio-unix-2.0
-	gobject-2.0
-	libxml-2.0
-	sqlite3 >= 3.7.0);
+    [LIBACCOUNTS],
+    [glib-2.0 >= 2.26
+     gio-2.0 >= 2.30
+     gio-unix-2.0
+     gobject-2.0
+     libxml-2.0
+     sqlite3 >= 3.7.0])
 AC_SUBST(LIBACCOUNTS_CFLAGS)
 AC_SUBST(LIBACCOUNTS_LIBS)
 
-PKG_CHECK_MODULES([CHECK], [check >= 0.9.4])
+# Build tests.
 
-AC_ISC_POSIX
-AC_PROG_CC
-AM_PROG_CC_STDC
-AM_PROG_CC_C_O
-AC_HEADER_STDC
-AC_PROG_LIBTOOL
+CHECK_REQUIRED="check >= 0.9.4"
+
+AC_ARG_ENABLE([tests],
+  [AS_HELP_STRING([--disable-tests], [build with testing support disabled])])
+
+AS_IF([test "x$enable_tests" != "xno"],
+  [PKG_CHECK_EXISTS([$CHECK_REQUIRED], [have_check=yes], [have_check=no])],
+  [have_check=no])
+
+AS_IF([test "x$have_check" = "xyes"],
+  [PKG_CHECK_MODULES([CHECK], [$CHECK_REQUIRED])
+   AC_SUBST([CHECK_CFLAGS])
+   AC_SUBST([CHECK_LIBS])],
+  [AS_IF([test "x$enable_tests" = "xyes"],
+      [AC_MSG_ERROR([tests enabled but required dependencies were not found])])])
+
+AM_CONDITIONAL([ENABLE_TESTS], [test "x$have_check" = "xyes"])
 
 GTK_DOC_CHECK([1.14], [--flavour no-tmpl])
 
-DATABASE_DIR="libaccounts-glib"
-AC_SUBST(DATABASE_DIR)
-AC_DEFINE_UNQUOTED(DATABASE_DIR, "$DATABASE_DIR",
+AC_SUBST([DATABASE_DIR], [libaccounts-glib])
+AC_DEFINE_UNQUOTED([DATABASE_DIR], ["$DATABASE_DIR"],
 		   [Directory for storing database (in $XDG_CONFIG_HOME)])
 
-APPLICATION_FILES_DIR="accounts/applications"
-AC_SUBST(APPLICATION_FILES_DIR)
-AC_DEFINE_UNQUOTED(APPLICATION_FILES_DIR, "$APPLICATION_FILES_DIR",
+AC_SUBST([APPLICATION_FILES_DIR], [accounts/applications])
+AC_DEFINE_UNQUOTED([APPLICATION_FILES_DIR], ["$APPLICATION_FILES_DIR"],
 		   [Directory for storing application definition files])
 
-SERVICE_TYPE_FILES_DIR="accounts/service_types"
-AC_SUBST(SERVICE_TYPE_FILES_DIR)
-AC_DEFINE_UNQUOTED(SERVICE_TYPE_FILES_DIR, "$SERVICE_TYPE_FILES_DIR",
+AC_SUBST([SERVICE_TYPE_FILES_DIR], [accounts/service_types])
+AC_DEFINE_UNQUOTED([SERVICE_TYPE_FILES_DIR], ["$SERVICE_TYPE_FILES_DIR"],
 		   [Directory for storing service type files])
 
-SERVICE_FILES_DIR="accounts/services"
-AC_SUBST(SERVICE_FILES_DIR)
-AC_DEFINE_UNQUOTED(SERVICE_FILES_DIR, "$SERVICE_FILES_DIR",
+AC_SUBST([SERVICE_FILES_DIR], [accounts/services])
+AC_DEFINE_UNQUOTED([SERVICE_FILES_DIR], ["$SERVICE_FILES_DIR"],
 		   [Directory for storing service files])
 
-PROVIDER_FILES_DIR="accounts/providers"
-AC_SUBST(PROVIDER_FILES_DIR)
-AC_DEFINE_UNQUOTED(PROVIDER_FILES_DIR, "$PROVIDER_FILES_DIR",
+AC_SUBST([PROVIDER_FILES_DIR], [accounts/providers])
+AC_DEFINE_UNQUOTED([PROVIDER_FILES_DIR], ["$PROVIDER_FILES_DIR"],
 		   [Directory for storing provider files])
 
-AC_ARG_ENABLE(cast-checks,  [  --disable-cast-checks   compile with GLIB cast checks disabled],[cchecks=${enableval}],cchecks=yes)
-if test "x$cchecks" = "xno"; then
-    CFLAGS="$CFLAGS -DG_DISABLE_CAST_CHECKS"
-fi
+AC_ARG_ENABLE([cast-checks],
+    [AS_HELP_STRING([--disable-cast-checks], [compile with GLib cast checks disabled])])
+AS_IF([test "x$enable_cast_checks" = "xno"],
+    [CFLAGS="$CFLAGS -DG_DISABLE_CAST_CHECKS"])
 
-AC_ARG_ENABLE(asserts,      [  --disable-asserts       compile with GLIB assertions disabled],[asserts=${enableval}],asserts=yes)
-if test "x$asserts" = "xno"; then
-    CFLAGS="$CFLAGS -DG_DISABLE_ASSERTS"
-fi
+AC_ARG_ENABLE([asserts], 
+    [AS_HELP_STRING([--disable-asserts], [compile with GLib assertions disabled])])
+AS_IF([test "x$enable_asserts" = "xno"],
+    [CFLAGS="$CFLAGS -DG_DISABLE_ASSERTS"])
 
-AC_ARG_ENABLE(checks,       [  --disable-checks        compile with GLIB checks disabled],[checks=${enableval}],checks=yes) 
-if test "x$checks" = "xno"; then
-    CFLAGS="$CFLAGS -DG_DISABLE_CHECKS"
-fi
+AC_ARG_ENABLE([checks],
+    [AS_HELP_STRING([--disable-checks], [compile with GLib checks disabled])])
+AS_IF([test "x$checks" = "xno"],
+    [CFLAGS="$CFLAGS -DG_DISABLE_CHECKS"])
 
-AC_ARG_ENABLE(debug,     [  --enable-debug          enable printing of debug messages],[ddebug=${enableval}],ddebug=no)
-if test "x$ddebug" = "xyes"; then
-    CFLAGS="$CFLAGS -DENABLE_DEBUG"
-fi
+AC_ARG_ENABLE([debug],
+    [AS_HELP_STRING([--enable-debug], [enable printing of debug messages])])
+AS_IF([test "x$enable_debug" = "xyes"],
+    [CFLAGS="$CFLAGS -DENABLE_DEBUG"])
 
-AC_ARG_ENABLE(coverage, [  --enable-coverage      compile with coverage info],[coverage=${enableval}],coverage=no)
-if test "x$coverage" = "xyes"; then
-    CFLAGS="$CFLAGS -g -fprofile-arcs -ftest-coverage"
-fi
+AC_ARG_ENABLE([coverage],
+    [AS_HELP_STRING([--enable-coverage], [compile with coverage info])])
+AS_IF([test "x$enable_coverage" = "xyes"],
+    [CFLAGS="$CFLAGS -g -fprofile-arcs -ftest-coverage"])
 
 # Python support
 
 PYGOBJECT_REQUIRED=2.90
 
 AC_ARG_ENABLE([python],
-              AS_HELP_STRING([--enable-python[=@<:@no/auto/yes@:>@]],[Build with python support]),
-              [enable_python=$enableval],
-              [enable_python="auto"])
+              [AS_HELP_STRING([--enable-python], [Build with python support])])
 
-if test "x$enable_python" = "xauto"; then
-    PKG_CHECK_EXISTS([pygobject-3.0 >= $PYGOBJECT_REQUIRED],
-                    [enable_python=yes],[enable_python=no])
-fi
+AS_IF([test "x$enable_python" != "xno"],
+    [PKG_CHECK_EXISTS([pygobject-3.0 >= $PYGOBJECT_REQUIRED],
+                      [have_python=yes], [have_python=no])])
 
-if test "x$enable_python" = "xyes"; then
-    PKG_CHECK_MODULES(PYTHON, [pygobject-3.0 >= $PYGOBJECT_REQUIRED])
+AS_IF([test "x$have_python" = "xyes"],
+    [AM_PATH_PYTHON
+     AC_SUBST([pyoverridesdir], [`$PYTHON -c "import gi;print gi._overridesdir"`])])
 
-    AM_PATH_PYTHON
+AM_CONDITIONAL([ENABLE_PYTHON], [test "x$have_python" = "xyes"])
 
-    pyoverridesdir=`$PYTHON -c "import gi;print gi._overridesdir"`
-    AC_SUBST(pyoverridesdir)
-fi
+AC_PATH_PROG([XMLLINT], [xmllint], [notfound])
+AS_IF([test "x$XMLLINT" = "xnotfound"],
+    [have_xmllint=no],
+    [have_xmllint=yes])
 
-AM_CONDITIONAL(ENABLE_PYTHON, test x"$enable_python" = "xyes")
+AS_IF([test "x$have_xmllint" = "xyes"],
+    [AC_SUBST([XMLLINT])],
+    [AC_MSG_WARN([testing of XML files against DTDs disabled, as xmllint was not found])])
 
-AC_OUTPUT([
+AM_CONDITIONAL([HAVE_XMLLINT], [test "x$have_xmllint" = "xyes"])
+
+# Man page, generated with gtk-doc and xsltproc from DocBook XML.
+AC_ARG_ENABLE([man],
+    [AS_HELP_STRING([--disable-man], [Disable building the man page])])
+
+AS_IF([test "x$enable_man" != "xno"],
+    [AC_CHECK_PROG([have_xsltproc], [xsltproc], [yes], [no])
+     JH_CHECK_XML_CATALOG([-//OASIS//DTD DocBook XML V4.3//EN],
+         [DocBook XML DTD V4.3], [have_docbookdtd=yes], [have_docbookdtd=no])
+     JH_CHECK_XML_CATALOG(
+         [http://docbook.sourceforge.net/release/xsl/current/html/refentry.xsl],
+         [DocBook XSL Stylesheets], [have_docbookxsl=yes],
+         [have_docbookxsl=no])
+     AS_IF([test "x$have_xsltproc" = "xyes" -a "x$have_docbookdtd" = "xyes" \
+         -a "x$have_docbookxsl" = "xyes"],
+         [have_manutils=yes],
+         [AS_IF([test "x$enable_man" = "xyes"],
+             [AC_MSG_ERROR(
+                 [man page generation requested but required utilities were not found])])
+          have_manutils=no])],
+    [have_manutils=no])
+
+AM_CONDITIONAL([ENABLE_MAN], [test "x$have_manutils" = "xyes"])
+
+AC_CONFIG_FILES([
 	Makefile
 	libaccounts-glib/Makefile
 	libaccounts-glib.pc
 	docs/Makefile
 	docs/reference/Makefile
+	docs/reference/version.xml
 	pygobject/Makefile
 	tests/Makefile
 	tools/Makefile
 ])
+AC_OUTPUT

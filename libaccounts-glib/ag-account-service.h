@@ -66,11 +66,6 @@ struct _AgAccountServiceClass
     void (*_ag_reserved7) (void);
 };
 
-/**
- * AgAccountService:
- *
- * Use the accessor functions below.
- */
 struct _AgAccountService
 {
     GObject parent_instance;
@@ -88,12 +83,22 @@ AgService *ag_account_service_get_service (AgAccountService *self);
 
 gboolean ag_account_service_get_enabled (AgAccountService *self);
 
+#ifndef AG_DISABLE_DEPRECATED
+AG_DEPRECATED_FOR(ag_account_service_get_variant)
 AgSettingSource ag_account_service_get_value (AgAccountService *self,
                                               const gchar *key,
                                               GValue *value);
 
+AG_DEPRECATED_FOR(ag_account_service_set_variant)
 void ag_account_service_set_value (AgAccountService *self, const gchar *key,
                                    const GValue *value);
+#endif
+GVariant *ag_account_service_get_variant (AgAccountService *self,
+                                          const gchar *key,
+                                          AgSettingSource *source);
+void ag_account_service_set_variant (AgAccountService *self,
+                                     const gchar *key,
+                                     GVariant *value);
 
 AgAccountSettingIter *
 ag_account_service_get_settings_iter (AgAccountService *self,
@@ -103,9 +108,12 @@ void ag_account_service_settings_iter_init (AgAccountService *self,
                                             AgAccountSettingIter *iter,
                                             const gchar *key_prefix);
 
+#ifndef AG_DISABLE_DEPRECATED
+AG_DEPRECATED_FOR(ag_account_settings_iter_get_next)
 gboolean ag_account_service_settings_iter_next (AgAccountSettingIter *iter,
                                                 const gchar **key,
                                                 const GValue **value);
+#endif
 
 AgAuthData *ag_account_service_get_auth_data (AgAccountService *self);
 

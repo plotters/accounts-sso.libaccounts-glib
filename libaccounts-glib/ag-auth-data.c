@@ -33,6 +33,8 @@
  * ag_auth_data_unref().
  */
 
+#define AG_DISABLE_DEPRECATION_WARNINGS
+
 #include "ag-auth-data.h"
 #include "ag-internals.h"
 #include "ag-util.h"
@@ -44,56 +46,55 @@ struct _AgAuthData {
     gchar *method;
     gchar *mechanism;
     GHashTable *parameters;
+    /* For compatibility with the deprecated API */
+    GHashTable *parameters_compat;
 };
 
 G_DEFINE_BOXED_TYPE (AgAuthData, ag_auth_data,
                      (GBoxedCopyFunc)ag_auth_data_ref,
                      (GBoxedFreeFunc)ag_auth_data_unref);
 
-static gboolean
+static GVariant *
 get_value_with_fallback (AgAccount *account, AgService *service,
-                         const gchar *key, GValue *value)
+                         const gchar *key)
 {
+    GVariant *value;
     ag_account_select_service (account, service);
-    if (ag_account_get_value (account, key, value) == AG_SETTING_SOURCE_NONE)
+    value = ag_account_get_variant (account, key, NULL);
+    if (value == NULL)
     {
         /* fallback to the global account */
         ag_account_select_service (account, NULL);
-        if (ag_account_get_value (account, key, value) ==
-            AG_SETTING_SOURCE_NONE)
-            return FALSE;
+        value = ag_account_get_variant (account, key, NULL);
     }
 
-    return TRUE;
+    return value;
 }
 
 static gchar *
 get_string_with_fallback (AgAccount *account, AgService *service,
                           const gchar *key)
 {
-    GValue value = {0, };
-    gchar *ret;
+    GVariant *value;
 
-    g_value_init(&value, G_TYPE_STRING);
-    if (!get_value_with_fallback (account, service, key, &value))
+    value = get_value_with_fallback (account, service, key);
+    if (value == NULL)
         return NULL;
 
-    ret = g_value_dup_string (&value);
-    g_value_unset (&value);
-    return ret;
+    return g_variant_dup_string (value, NULL);
 }
 
-static guint
+static guint32
 get_uint_with_fallback (AgAccount *account, AgService *service,
                         const gchar *key)
 {
-    GValue value = {0, };
+    GVariant *value;
 
-    g_value_init(&value, G_TYPE_UINT);
-    if (!get_value_with_fallback (account, service, key, &value))
+    value = get_value_with_fallback (account, service, key);
+    if (value == NULL)
         return 0;
 
-    return g_value_get_uint (&value);
+    return g_variant_get_uint32 (value);
 }
 
 static void
@@ -102,19 +103,19 @@ read_auth_settings (AgAccount *account, const gchar *key_prefix,
 {
     AgAccountSettingIter iter;
     const gchar *key;
-    const GValue *value;
+    GVariant *value;
 
     ag_account_settings_iter_init (account, &iter, key_prefix);
-    while (ag_account_settings_iter_next (&iter, &key, &value))
+    while (ag_account_settings_iter_get_next (&iter, &key, &value))
     {
-        g_hash_table_insert (out, g_strdup (key), _ag_value_slice_dup (value));
+        g_hash_table_insert (out, g_strdup (key), g_variant_ref (value));
     }
 }
 
 AgAuthData *
 _ag_auth_data_new (AgAccount *account, AgService *service)
 {
-    guint credentials_id;
+    guint32 credentials_id;
     gchar *method, *mechanism;
     gchar *key_prefix;
     GHashTable *parameters;
@@ -138,7 +139,7 @@ _ag_auth_data_new (AgAccount *account, AgService *service)
 
     parameters = g_hash_table_new_full (g_str_hash, g_str_equal,
                                         g_free,
-                                        (GDestroyNotify)_ag_value_slice_free);
+                                        (GDestroyNotify)g_variant_unref);
     key_prefix = g_strdup_printf ("auth/%s/%s/", method, mechanism);
 
     /* first, take the values from the global account */
@@ -156,6 +157,7 @@ _ag_auth_data_new (AgAccount *account, AgService *service)
     data->method = method;
     data->mechanism = mechanism;
     data->parameters = parameters;
+    data->parameters_compat = NULL;
     return data;
 }
 
@@ -191,6 +193,8 @@ ag_auth_data_unref (AgAuthData *self)
         g_free (self->method);
         g_free (self->mechanism);
         g_hash_table_unref (self->parameters);
+        if (self->parameters_compat != NULL)
+            g_hash_table_unref (self->parameters_compat);
         g_slice_free (AgAuthData, self);
     }
 }
@@ -202,6 +206,8 @@ ag_auth_data_unref (AgAuthData *self)
  * Gets the ID of the credentials associated with this account.
  *
  * Returns: the credentials ID.
+ *
+ * Since: 1.1
  */
 guint
 ag_auth_data_get_credentials_id (AgAuthData *self)
@@ -248,12 +254,39 @@ ag_auth_data_get_mechanism (AgAuthData *self)
  *
  * Returns: (transfer none) (element-type utf8 GValue): a #GHashTable
  * containing all the authentication parameters.
+ *
+ * Deprecated: 1.4: use ag_auth_data_get_login_parameters() instead.
  */
 GHashTable *
 ag_auth_data_get_parameters (AgAuthData *self)
 {
     g_return_val_if_fail (self != NULL, NULL);
-    return self->parameters;
+
+    if (self->parameters_compat == NULL)
+    {
+        GHashTableIter iter;
+        const gchar *key;
+        GVariant *variant;
+
+        self->parameters_compat =
+            g_hash_table_new_full (g_str_hash, g_str_equal,
+                                   g_free,
+                                   (GDestroyNotify)_ag_value_slice_free);
+
+        /* Convert the GVariants into GValues */
+        g_hash_table_iter_init (&iter, self->parameters);
+        while (g_hash_table_iter_next (&iter,
+                                       (gpointer)&key, (gpointer)&variant))
+        {
+            GValue *value = g_slice_new0 (GValue);
+            _ag_value_from_variant (value, variant);
+            g_hash_table_insert (self->parameters_compat,
+                                 g_strdup (key), value);
+        }
+
+    }
+
+    return self->parameters_compat;
 }
 
 /**
@@ -265,10 +298,13 @@ ag_auth_data_get_parameters (AgAuthData *self)
  * Insert the given authentication parameters into the authentication data. If
  * some parameters were already present, the parameters passed with this method
  * take precedence.
+ *
+ * Deprecated: 1.4: use ag_auth_data_get_login_parameters() instead.
  */
 void
 ag_auth_data_insert_parameters (AgAuthData *self, GHashTable *parameters)
 {
+    GHashTable *self_parameters;
     GHashTableIter iter;
     const gchar *key;
     const GValue *value;
@@ -276,11 +312,77 @@ ag_auth_data_insert_parameters (AgAuthData *self, GHashTable *parameters)
     g_return_if_fail (self != NULL);
     g_return_if_fail (parameters != NULL);
 
+    self_parameters = ag_auth_data_get_parameters (self);
     g_hash_table_iter_init (&iter, parameters);
     while (g_hash_table_iter_next (&iter, (gpointer)&key, (gpointer)&value))
     {
-        g_hash_table_insert (self->parameters,
+        g_hash_table_insert (self_parameters,
                              g_strdup (key),
                              _ag_value_slice_dup (value));
     }
+}
+
+/**
+ * ag_auth_data_get_login_parameters:
+ * @self: the #AgAuthData.
+ * @extra_parameters: (transfer floating): a #GVariant containing
+ * client-specific authentication parameters to be added to the returned
+ * dictionary.
+ *
+ * Gets the authentication parameters.
+ *
+ * Returns: (transfer none): a floating #GVariant of type
+ * %G_VARIANT_TYPE_VARDICT containing all the authentication parameters.
+ *
+ * Since: 1.4
+ */
+GVariant *
+ag_auth_data_get_login_parameters (AgAuthData *self, GVariant *extra_parameters)
+{
+    GVariantBuilder builder;
+    GHashTableIter iter;
+    gchar *key;
+    GVariant *value;
+    GSList *skip_keys = NULL;
+
+    g_return_val_if_fail (self != NULL, NULL);
+
+    g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
+
+    /* Put the parameters from the client. */
+    if (extra_parameters != NULL)
+    {
+        GVariantIter i_extra;
+
+        g_variant_ref_sink (extra_parameters);
+        g_variant_iter_init (&i_extra, extra_parameters);
+        while (g_variant_iter_next (&i_extra, "{&sv}", &key, &value))
+        {
+            g_variant_builder_add (&builder, "{sv}", key, value);
+
+            /* Make sure we are not going to add the same key later */
+            if (g_hash_table_lookup (self->parameters, key))
+                skip_keys = g_slist_prepend (skip_keys, g_strdup (key));
+        }
+        g_variant_unref (extra_parameters);
+    }
+
+    /* Put the parameters from the account first. */
+    g_hash_table_iter_init (&iter, self->parameters);
+    while (g_hash_table_iter_next (&iter,
+                                   (gpointer)&key, (gpointer)&value))
+    {
+        /* If the key is also present in extra_parameters, then don't add it */
+        if (!g_slist_find_custom (skip_keys, key, (GCompareFunc)g_strcmp0))
+            g_variant_builder_add (&builder, "{sv}", key, value);
+    }
+
+    /* Free the skip_keys list */
+    while (skip_keys != NULL)
+    {
+        g_free (skip_keys->data);
+        skip_keys = g_slist_delete_link (skip_keys, skip_keys);
+    }
+
+    return g_variant_builder_end (&builder);
 }

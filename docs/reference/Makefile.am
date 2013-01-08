@@ -25,7 +25,7 @@ SCANGOBJ_OPTIONS=
 
 # Extra options to supply to gtkdoc-scan.
 # e.g. SCAN_OPTIONS=--deprecated-guards="GTK_DISABLE_DEPRECATED" 
-SCAN_OPTIONS=--rebuild-types
+SCAN_OPTIONS=--rebuild-types --deprecated-guards="AG_DISABLE_DEPRECATED"
 
 # Extra options to supply to gtkdoc-mkdb.
 # e.g. MKDB_OPTIONS=--sgml-mode --output-format=xml
@@ -51,14 +51,26 @@ HTML_IMAGES=
 
 # Extra SGML files that are included by $(DOC_MAIN_SGML_FILE).
 # e.g. content_files=running.sgml building.sgml changes-2.0.sgml
-content_files=
+content_files= \
+	ag-backup.xml \
+	ag-tool.xml \
+	application-file-format.xml \
+	gettext-xml-files.xml \
+	libaccounts-compiling.xml \
+	libaccounts-glossary.xml \
+	libaccounts-overview.xml \
+	libaccounts-running.xml \
+	provider-file-format.xml \
+	service-file-format.xml \
+	service-type-file-format.xml \
+	validating-xml-files.xml
 
 # CFLAGS and LDFLAGS for compiling gtkdoc-scangobj with your library.
 # Only needed if you are using gtkdoc-scangobj to dynamically query widget
 # signals and properties.
 # e.g. INCLUDES=-I$(top_srcdir) -I$(top_builddir) $(GTK_DEBUG_FLAGS)
 # e.g. GTKDOC_LIBS=$(top_builddir)/gtk/$(gtktargetlib)
-INCLUDES=-I$(top_srcdir) $(LIBACCOUNTS_CFLAGS)
+AM_CPPFLAGS=-I$(top_srcdir) $(LIBACCOUNTS_CFLAGS)
 GTKDOC_LIBS=$(top_builddir)/libaccounts-glib/libaccounts-glib.la $(LIBACCOUNTS_LIBS)
 
 # This includes the standard gtk-doc make rules, copied by gtkdocize.
@@ -67,6 +79,21 @@ include $(top_srcdir)/gtk-doc.make
 # Other files to distribute
 # e.g. EXTRA_DIST += version.xml.in
 EXTRA_DIST += 
+
+if ENABLE_MAN
+ag-backup.1: ag-backup.xml
+	$(AM_V_GEN)xsltproc -nonet --path $(builddir) http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
+
+ag-tool.1: ag-tool.xml
+	$(AM_V_GEN)xsltproc -nonet --path $(builddir) http://docbook.sourceforge.net/release/xsl/current/manpages/docbook.xsl $<
+
+nodist_man_MANS = \
+	ag-backup.1 \
+	ag-tool.1
+
+# Already defined in gtk-doc.make.
+CLEANFILES += $(nodist_man_MANS)
+endif
 
 if ENABLE_GTK_DOC
 TESTS = $(GTKDOC_CHECK)

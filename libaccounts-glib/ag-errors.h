@@ -59,6 +59,8 @@ typedef enum {
  * @AG_ACCOUNTS_ERROR_DELETED: the account was in the process of being deleted
  * @AG_ACCOUNTS_ERROR_DB_LOCKED: the database was locked
  * @AG_ACCOUNTS_ERROR_ACCOUNT_NOT_FOUND: the requested account was not found
+ * @AG_ACCOUNTS_ERROR_STORE_IN_PROGRESS: an asynchronous store operation is
+ * already in progress. Since 1.4
  *
  * These identify the various errors that can occur with methods in
  * libaccounts-glib that return a #GError.
@@ -68,7 +70,8 @@ typedef enum {
     AG_ACCOUNTS_ERROR_DISPOSED = AG_ERROR_DISPOSED,
     AG_ACCOUNTS_ERROR_DELETED = AG_ERROR_DELETED,
     AG_ACCOUNTS_ERROR_DB_LOCKED = AG_ERROR_DB_LOCKED,
-    AG_ACCOUNTS_ERROR_ACCOUNT_NOT_FOUND = AG_ERROR_ACCOUNT_NOT_FOUND
+    AG_ACCOUNTS_ERROR_ACCOUNT_NOT_FOUND = AG_ERROR_ACCOUNT_NOT_FOUND,
+    AG_ACCOUNTS_ERROR_STORE_IN_PROGRESS,
 } AgAccountsError;
 
 G_END_DECLS

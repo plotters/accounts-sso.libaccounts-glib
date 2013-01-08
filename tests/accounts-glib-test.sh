@@ -7,6 +7,8 @@ export AG_PROVIDERS=$TESTDATADIR
 export ACCOUNTS=/tmp/
 export AG_DEBUG=all
 export G_MESSAGES_DEBUG=all
+export G_DEBUG=fatal-criticals
+export G_SLICE=debug-blocks
 export PATH=.:$PATH
 
 # If dbus-test-runner exists, use it to run the tests in a separate D-Bus

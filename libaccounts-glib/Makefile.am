@@ -3,6 +3,8 @@ lib_LTLIBRARIES = \
 
 libaccounts_glib_la_CPPFLAGS = \
 	-I$(top_srcdir) \
+	-I$(top_builddir) \
+	-I$(builddir) \
 	-DG_LOG_DOMAIN=\"accounts-glib\"
 libaccounts_glib_la_CFLAGS = \
 	$(LIBACCOUNTS_CFLAGS) \
@@ -59,14 +61,13 @@ libaccounts_glib_include_HEADERS = \
 	ag-service-type.h \
 	ag-types.h
 
-%-marshal.h: %-marshal.list Makefile
-	glib-genmarshal --header --prefix=$(subst -,_,$*)_marshal $< > $*-marshal.h
+ag-marshal.h: ag-marshal.list Makefile
+	$(AM_V_GEN)glib-genmarshal --header --prefix=ag_marshal $< > $@
 
-%-marshal.c: %-marshal.list Makefile
-	glib-genmarshal --body --prefix=$(subst -,_,$*)_marshal $< > $*-marshal.c
+ag-marshal.c: ag-marshal.list Makefile
+	$(AM_V_GEN)glib-genmarshal --body --prefix=ag_marshal $< > $@
 
-
-EXTRA_DIST = ag-marshal.list
+dist_noinst_DATA = ag-marshal.list
 
 -include $(INTROSPECTION_MAKEFILE)
 INTROSPECTION_GIRS =
@@ -117,6 +118,13 @@ typelib_DATA = $(INTROSPECTION_GIRS:.gir=.typelib)
 CLEANFILES += $(gir_DATA) $(typelib_DATA)
 endif
 
+# XML DTDs
+dtddir = $(datadir)/xml/accounts/schema/dtd
+dist_dtd_DATA = \
+	accounts-application.dtd \
+	accounts-provider.dtd \
+	accounts-service.dtd \
+	accounts-service-type.dtd
 
 # Vala bindings
 vapidir = $(datadir)/vala/vapi

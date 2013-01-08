@@ -25,6 +25,7 @@
 #ifndef _AG_ACCOUNT_H_
 #define _AG_ACCOUNT_H_
 
+#include <gio/gio.h>
 #include <glib-object.h>
 #include <libaccounts-glib/ag-types.h>
 
@@ -57,11 +58,6 @@ struct _AgAccountClass
     void (*_ag_reserved7) (void);
 };
 
-/**
- * AgAccount:
- *
- * Use the accessor functions below.
- */
 struct _AgAccount
 {
     GObject parent_instance;
@@ -112,10 +108,20 @@ typedef enum {
     AG_SETTING_SOURCE_PROFILE,
 } AgSettingSource;
 
+#ifndef AG_DISABLE_DEPRECATED
+AG_DEPRECATED_FOR(ag_account_get_variant)
 AgSettingSource ag_account_get_value (AgAccount *account, const gchar *key,
                                       GValue *value);
+AG_DEPRECATED_FOR(ag_account_set_variant)
 void ag_account_set_value (AgAccount *account, const gchar *key,
                            const GValue *value);
+#endif
+
+GVariant *ag_account_get_variant (AgAccount *account, const gchar *key,
+                                  AgSettingSource *source);
+void ag_account_set_variant (AgAccount *account, const gchar *key,
+                             GVariant *value);
+
 
 typedef struct _AgAccountSettingIter AgAccountSettingIter;
 
@@ -142,9 +148,15 @@ void ag_account_settings_iter_free (AgAccountSettingIter *iter);
 void ag_account_settings_iter_init (AgAccount *account,
                                     AgAccountSettingIter *iter,
                                     const gchar *key_prefix);
+#ifndef AG_DISABLE_DEPRECATED
+AG_DEPRECATED_FOR(ag_account_settings_iter_get_next)
 gboolean ag_account_settings_iter_next (AgAccountSettingIter *iter,
                                         const gchar **key,
                                         const GValue **value);
+#endif
+gboolean ag_account_settings_iter_get_next (AgAccountSettingIter *iter,
+                                            const gchar **key,
+                                            GVariant **value);
 
 AgAccountSettingIter *ag_account_get_settings_iter (AgAccount *account,
                                                     const gchar *key_prefix);
@@ -169,10 +181,20 @@ AgAccountWatch ag_account_watch_dir (AgAccount *account,
                                      gpointer user_data);
 void ag_account_remove_watch (AgAccount *account, AgAccountWatch watch);
 
+#ifndef AG_DISABLE_DEPRECATED
 typedef void (*AgAccountStoreCb) (AgAccount *account, const GError *error,
                                   gpointer user_data);
+AG_DEPRECATED_FOR(ag_account_store_async)
 void ag_account_store (AgAccount *account, AgAccountStoreCb callback,
                        gpointer user_data);
+#endif
+void ag_account_store_async (AgAccount *account,
+                             GCancellable *cancellable,
+                             GAsyncReadyCallback callback,
+                             gpointer user_data);
+gboolean ag_account_store_finish (AgAccount *account,
+                                  GAsyncResult *res,
+                                  GError **error);
 
 gboolean ag_account_store_blocking (AgAccount *account, GError **error);
 

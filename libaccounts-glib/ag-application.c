@@ -182,8 +182,9 @@ parse_item (xmlTextReaderPtr reader, GHashTable *hash_table,
 }
 
 static gboolean
-parse_items (xmlTextReaderPtr reader, GHashTable **hash_table,
-             const gchar *container_tag, const gchar *item_tag)
+parse_items (xmlTextReaderPtr reader,
+             GHashTable **hash_table,
+             const gchar *item_tag)
 {
     const gchar *name;
 
@@ -276,12 +277,12 @@ parse_application (xmlTextReaderPtr reader, AgApplication *application)
             else if (strcmp (name, "services") == 0)
             {
                 ok = parse_items (reader, &application->services,
-                                  name, "service");
+                                  "service");
             }
             else if (strcmp (name, "service-types") == 0)
             {
                 ok = parse_items (reader, &application->service_types,
-                                  name, "service-type");
+                                  "service-type");
             }
             else
                 ok = TRUE;

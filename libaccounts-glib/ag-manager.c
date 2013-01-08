@@ -54,7 +54,6 @@
 #include "ag-internals.h"
 #include "ag-service.h"
 #include "ag-util.h"
-#include <dbus/dbus-glib-lowlevel.h>
 #include <sched.h>
 #include <sqlite3.h>
 #include <string.h>
@@ -92,7 +91,7 @@ struct _AgManagerPrivate {
     sqlite3_int64 last_service_id;
     sqlite3_int64 last_account_id;
 
-    DBusConnection *dbus_conn;
+    GDBusConnection *dbus_conn;
 
     /* Cache for AgService */
     GHashTable *services;
@@ -112,6 +111,9 @@ struct _AgManagerPrivate {
     /* D-Bus object paths we are listening to */
     GPtrArray *object_paths;
 
+    /* List of GDBus signal subscriptions */
+    GSList *subscription_ids;
+
     GError *last_error;
 
     guint db_timeout;
@@ -128,8 +130,8 @@ typedef struct {
     gchar *sql;
     AgAccountChanges *changes;
     guint id;
-    AgAccountStoreCb callback;
-    gpointer user_data;
+    GSimpleAsyncResult *async_result;
+    GCancellable *cancellable;
 } StoreCbData;
 
 typedef struct {
@@ -317,7 +319,7 @@ get_account_services_from_accounts (AgManager *manager,
 
         account = ag_manager_get_account (manager,
                                           (AgAccountId)
-                                          GPOINTER_TO_INT(account_list->data));
+                                          GPOINTER_TO_UINT(account_list->data));
         if (G_UNLIKELY (account == NULL))
             continue;
 
@@ -384,44 +386,6 @@ timed_unref_account (gpointer account)
 }
 
 static gboolean
-parse_message_header (DBusMessageIter *iter,
-                      struct timespec *ts, AgAccountId *id,
-                      gboolean *created, gboolean *deleted,
-                      const gchar **provider_name)
-{
-#define EXPECT_TYPE(t) \
-    if (G_UNLIKELY (dbus_message_iter_get_arg_type (iter) != t)) return FALSE
-
-    EXPECT_TYPE (DBUS_TYPE_UINT32);
-    memset (ts, 0, sizeof (struct timespec));
-    dbus_message_iter_get_basic (iter, &ts->tv_sec);
-    dbus_message_iter_next (iter);
-
-    EXPECT_TYPE (DBUS_TYPE_UINT32);
-    dbus_message_iter_get_basic (iter, &ts->tv_nsec);
-    dbus_message_iter_next (iter);
-
-    EXPECT_TYPE (DBUS_TYPE_UINT32);
-    dbus_message_iter_get_basic (iter, id);
-    dbus_message_iter_next (iter);
-
-    EXPECT_TYPE (DBUS_TYPE_BOOLEAN);
-    dbus_message_iter_get_basic (iter, created);
-    dbus_message_iter_next (iter);
-
-    EXPECT_TYPE (DBUS_TYPE_BOOLEAN);
-    dbus_message_iter_get_basic (iter, deleted);
-    dbus_message_iter_next (iter);
-
-    EXPECT_TYPE (DBUS_TYPE_STRING);
-    dbus_message_iter_get_basic (iter, provider_name);
-    dbus_message_iter_next (iter);
-
-#undef EXPECT_TYPE
-    return TRUE;
-}
-
-static gboolean
 ag_manager_must_emit_updated (AgManager *manager, AgAccountChanges *changes)
 {
     AgManagerPrivate *priv = manager->priv;
@@ -484,9 +448,6 @@ check_signal_processed (AgManagerPrivate *priv, struct timespec *ts)
         {
             DEBUG_INFO ("Signal already processed: %lu-%lu",
                         ts->tv_sec, ts->tv_nsec);
-            g_slice_free (ProcessedSignalData, psd);
-            priv->processed_signals =
-                g_list_delete_link (priv->processed_signals, list);
             return TRUE;
         }
     }
@@ -518,17 +479,16 @@ check_signal_processed (AgManagerPrivate *priv, struct timespec *ts)
  * checks whether the sender of the message is listed in the object_paths array
  */
 static gboolean
-message_is_from_interesting_object (DBusMessage *msg, GPtrArray *object_paths)
+object_path_is_interesting (const gchar *msg_object_path,
+                            GPtrArray *object_paths)
 {
-    const gchar *msg_object_path;
-    gint i;
+    guint i;
 
     /* If the object_paths array is empty, it means that we are
      * interested in all service types. */
     if (object_paths->len == 0)
         return TRUE;
 
-    msg_object_path = dbus_message_get_path (msg);
     if (G_UNLIKELY (msg_object_path == NULL))
         return FALSE;
 
@@ -541,9 +501,14 @@ message_is_from_interesting_object (DBusMessage *msg, GPtrArray *object_paths)
     return FALSE;
 }
 
-static DBusHandlerResult
-dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
-                      void *user_data)
+static void
+dbus_filter_callback (G_GNUC_UNUSED GDBusConnection *dbus_conn,
+                      G_GNUC_UNUSED const gchar *sender_name,
+                      const gchar *object_path,
+                      G_GNUC_UNUSED const gchar *interface_name,
+                      G_GNUC_UNUSED const gchar *signal_name,
+                      GVariant *msg,
+                      gpointer user_data)
 {
     AgManager *manager = AG_MANAGER (user_data);
     AgManagerPrivate *priv = manager->priv;
@@ -553,36 +518,34 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
     AgAccountChanges *changes;
     struct timespec ts;
     gboolean deleted, created;
-    gboolean ret;
     gboolean ours = FALSE;
     gboolean updated = FALSE;
     gboolean enabled = FALSE;
     gboolean must_instantiate = TRUE;
-    DBusMessageIter iter;
+    GVariant *v_services;
     GList *list, *node;
 
-    if (!dbus_message_is_signal (msg, AG_DBUS_IFACE, AG_DBUS_SIG_CHANGED))
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    if (!object_path_is_interesting (object_path, priv->object_paths))
+        return;
 
-    if (!message_is_from_interesting_object(msg, priv->object_paths))
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-
-    dbus_message_iter_init (msg, &iter);
-    ret = parse_message_header (&iter, &ts, &account_id,
-                                &created, &deleted, &provider_name);
-    if (G_UNLIKELY (!ret))
-    {
-        g_warning ("%s: error in parsing signal arguments", G_STRFUNC);
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-    }
+    memset (&ts, 0, sizeof (struct timespec));
+    g_variant_get (msg,
+                   "(uuubb&s@*)",
+                   &ts.tv_sec,
+                   &ts.tv_nsec,
+                   &account_id,
+                   &created,
+                   &deleted,
+                   &provider_name,
+                   &v_services);
 
     DEBUG_INFO ("path = %s, time = %lu-%lu (%p)",
-                dbus_message_get_path (msg), ts.tv_sec, ts.tv_nsec,
+                object_path, ts.tv_sec, ts.tv_nsec,
                 manager);
 
     /* Do not process the same signal more than once. */
     if (check_signal_processed (priv, &ts))
-        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+        goto skip_processing;
 
     list = priv->emitted_signals;
     while (list != NULL)
@@ -605,7 +568,7 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
                                                     priv->emitted_signals,
                                                     node);
             if (!must_process)
-                return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+                goto skip_processing;
         }
     }
 
@@ -621,7 +584,8 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
         esd->must_process = TRUE;
     }
 
-    changes = _ag_account_changes_from_dbus (manager, &iter, created, deleted);
+    changes = _ag_account_changes_from_dbus (manager, v_services,
+                                             created, deleted);
 
     /* check if the account is loaded */
     account = g_hash_table_lookup (priv->accounts,
@@ -645,8 +609,7 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
                                 "id", account_id,
                                 "foreign", created,
                                 NULL);
-        g_return_val_if_fail (AG_IS_ACCOUNT (account),
-                              DBUS_HANDLER_RESULT_NOT_YET_HANDLED);
+        g_return_if_fail (AG_IS_ACCOUNT (account));
 
         g_object_weak_ref (G_OBJECT (account), account_weak_notify, manager);
         g_hash_table_insert (priv->accounts, GUINT_TO_POINTER (account_id),
@@ -670,53 +633,48 @@ dbus_filter_callback (DBusConnection *dbus_conn, DBusMessage *msg,
                              created,
                              deleted);
 
-    return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
-}
-
-static DBusMessage *
-make_signal_for_service_type (DBusMessage *global_msg,
-                              const gchar *service_type)
-{
-    gchar path[256];
-    gchar *escaped_type;
-    DBusMessage *msg;
-
-    escaped_type = _ag_dbus_escape_as_identifier (service_type);
-    g_snprintf (path, sizeof (path), "%s/%s",
-                AG_DBUS_PATH_SERVICE, escaped_type);
-    g_free (escaped_type);
-
-    msg = dbus_message_copy (global_msg);
-    DEBUG_INFO("Setting path to %s", path);
-    if (!dbus_message_set_path (msg, path))
-        g_warning("setting path failed!");
-    return msg;
+skip_processing:
+    g_variant_unref (v_services);
 }
 
 static void
 signal_account_changes_on_service_types (AgManager *manager,
                                          AgAccountChanges *changes,
-                                         DBusMessage *global_msg)
+                                         GVariant *msg)
 {
     GPtrArray *service_types;
-    gint i;
+    guint i;
 
+    /* Add a temporary reference to the message parameters, to make
+     * sure that g_dbus_connection_emit_signal() won't steal our
+     * variant. */
+    g_variant_ref (msg);
     service_types = _ag_account_changes_get_service_types (changes);
     for (i = 0; i < service_types->len; i++)
     {
         const gchar *service_type;
-        DBusMessage *msg;
+        gchar path[256];
+        gchar *escaped_type;
         gboolean ret;
 
         service_type = g_ptr_array_index(service_types, i);
-        msg = make_signal_for_service_type (global_msg, service_type);
+        escaped_type = _ag_dbus_escape_as_identifier (service_type);
+        g_snprintf (path, sizeof (path), "%s/%s",
+                    AG_DBUS_PATH_SERVICE, escaped_type);
+        g_free (escaped_type);
 
-        ret = dbus_connection_send (manager->priv->dbus_conn, msg, NULL);
+        ret = g_dbus_connection_emit_signal (manager->priv->dbus_conn,
+                                             NULL,
+                                             path,
+                                             AG_DBUS_IFACE,
+                                             AG_DBUS_SIG_CHANGED,
+                                             msg,
+                                             NULL);
         if (G_UNLIKELY (!ret))
             g_warning ("Emission of DBus signal failed");
-        dbus_message_unref (msg);
     }
     g_ptr_array_free (service_types, TRUE);
+    g_variant_unref (msg);
 }
 
 static void
@@ -724,7 +682,7 @@ signal_account_changes (AgManager *manager, AgAccount *account,
                         AgAccountChanges *changes)
 {
     AgManagerPrivate *priv = manager->priv;
-    DBusMessage *msg;
+    GVariant *msg;
     EmittedSignalData eds;
 
     clock_gettime(CLOCK_MONOTONIC, &eds.ts);
@@ -736,10 +694,12 @@ signal_account_changes (AgManager *manager, AgAccount *account,
         return;
     }
 
+    g_variant_ref_sink (msg);
+
     /* emit the signal on all service-types */
     signal_account_changes_on_service_types(manager, changes, msg);
 
-    dbus_connection_flush (priv->dbus_conn);
+    g_dbus_connection_flush_sync (priv->dbus_conn, NULL, NULL);
     DEBUG_INFO ("Emitted signal, time: %lu-%lu", eds.ts.tv_sec, eds.ts.tv_nsec);
 
     eds.must_process = FALSE;
@@ -747,7 +707,7 @@ signal_account_changes (AgManager *manager, AgAccount *account,
         g_list_prepend (priv->emitted_signals,
                         g_slice_dup (EmittedSignalData, &eds));
 
-    dbus_message_unref (msg);
+    g_variant_unref (msg);
 }
 
 static gboolean
@@ -920,29 +880,8 @@ exec_transaction (AgManager *manager, AgAccount *account,
 }
 
 static void
-lost_weak_ref (gpointer data, GObject *dead)
-{
-    StoreCbData *sd = data;
-    AgManagerPrivate *priv;
-
-    GError error = { AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DISPOSED,
-                     "Account disposed" };
-
-    g_assert ((GObject *)sd->account == dead);
-    _ag_account_store_completed (sd->account, sd->changes,
-                                 sd->callback, &error, sd->user_data);
-
-    priv = AG_MANAGER_PRIV (sd->manager);
-    priv->locks = g_list_remove (priv->locks, sd);
-    sd->account = NULL; /* so that the weak reference is not removed */
-    store_cb_data_free (sd);
-}
-
-static void
 store_cb_data_free (StoreCbData *sd)
 {
-    if (sd->account)
-        g_object_weak_unref (G_OBJECT (sd->account), lost_weak_ref, sd);
     if (sd->id)
         g_source_remove (sd->id);
     g_free (sd->sql);
@@ -961,16 +900,27 @@ exec_transaction_idle (StoreCbData *sd)
     g_return_val_if_fail (AG_IS_MANAGER (manager), FALSE);
     priv = manager->priv;
 
+    g_object_ref (manager);
+    g_object_ref (account);
+
+    /* If the operation was cancelled, abort it. */
+    if (sd->cancellable != NULL)
+    {
+        g_cancellable_set_error_if_cancelled (sd->cancellable, &error);
+        if (error != NULL)
+            goto finish;
+    }
+
     g_return_val_if_fail (priv->begin_stmt != NULL, FALSE);
     ret = sqlite3_step (priv->begin_stmt);
     if (ret == SQLITE_BUSY)
     {
         sched_yield ();
+        g_object_unref (account);
+        g_object_unref (manager);
         return TRUE; /* call this callback again */
     }
 
-    g_object_ref (manager);
-    g_object_ref (account);
     if (ret == SQLITE_DONE)
     {
         exec_transaction (manager, account, sd->sql, sd->changes, &error);
@@ -980,10 +930,14 @@ exec_transaction_idle (StoreCbData *sd)
         error = g_error_new_literal (AG_ACCOUNTS_ERROR, AG_ACCOUNTS_ERROR_DB,
                                      "Generic error");
     }
-    _ag_account_store_completed (account, sd->changes,
-                                 sd->callback, error, sd->user_data);
-    if (error)
-        g_error_free (error);
+
+finish:
+    if (error != NULL)
+    {
+        g_simple_async_result_take_error (sd->async_result, error);
+    }
+
+    _ag_account_store_completed (account, sd->changes);
 
     priv->locks = g_list_remove (priv->locks, sd);
     sd->id = 0;
@@ -1030,7 +984,8 @@ prepare_transaction_statements (AgManagerPrivate *priv)
 
 static void
 set_last_rowid_as_account_id (sqlite3_context *ctx,
-                              int argc, sqlite3_value **argv)
+                              G_GNUC_UNUSED int argc,
+                              G_GNUC_UNUSED sqlite3_value **argv)
 {
     AgManagerPrivate *priv;
 
@@ -1040,7 +995,9 @@ set_last_rowid_as_account_id (sqlite3_context *ctx,
 }
 
 static void
-get_account_id (sqlite3_context *ctx, int argc, sqlite3_value **argv)
+get_account_id (sqlite3_context *ctx,
+                G_GNUC_UNUSED int argc,
+                G_GNUC_UNUSED sqlite3_value **argv)
 {
     AgManagerPrivate *priv;
 
@@ -1102,7 +1059,7 @@ get_db_version (sqlite3 *db)
 }
 
 static gboolean
-create_db (sqlite3 *db, guint timeout)
+create_db (sqlite3 *db)
 {
     const gchar *sql;
     gchar *error;
@@ -1221,7 +1178,7 @@ open_db (AgManager *manager)
     version = get_db_version(priv->db);
     DEBUG_INFO ("DB version: %d", version);
     if (version < 1)
-        ok = create_db(priv->db, priv->db_timeout);
+        ok = create_db(priv->db);
     /* insert here code to upgrade the DB from older versions... */
 
     if (G_UNLIKELY (!ok))
@@ -1237,80 +1194,70 @@ open_db (AgManager *manager)
     return TRUE;
 }
 
-static gboolean
-add_matches (AgManagerPrivate *priv)
+static inline void
+add_matches (AgManager *manager)
 {
-    gchar match[DBUS_MAXIMUM_MATCH_RULE_LENGTH];
-    DBusError error;
-    gint i;
+    AgManagerPrivate *priv = manager->priv;
+    guint i;
 
-    dbus_error_init (&error);
     for (i = 0; i < priv->object_paths->len; i++)
     {
         const gchar *path = g_ptr_array_index(priv->object_paths, i);
+        guint id;
 
-        g_snprintf (match, sizeof (match),
-                    "type='signal',interface='" AG_DBUS_IFACE "',path='%s'",
-                    path);
-        dbus_bus_add_match (priv->dbus_conn, match, &error);
-        if (G_UNLIKELY (dbus_error_is_set (&error)))
-        {
-            g_warning ("Failed to add dbus filter (%s)", error.message);
-            dbus_error_free (&error);
-            return FALSE;
-        }
+        id = g_dbus_connection_signal_subscribe (priv->dbus_conn,
+                                                 NULL,
+                                                 AG_DBUS_IFACE,
+                                                 AG_DBUS_SIG_CHANGED,
+                                                 path,
+                                                 NULL,
+                                                 G_DBUS_SIGNAL_FLAGS_NONE,
+                                                 dbus_filter_callback,
+                                                 manager,
+                                                 NULL);
+        priv->subscription_ids =
+            g_slist_prepend (priv->subscription_ids, GUINT_TO_POINTER (id));
     }
-    return TRUE;
 }
 
-static inline gboolean
-add_typeless_match (AgManagerPrivate *priv)
+static inline void
+add_typeless_match (AgManager *manager)
 {
-    DBusError error;
+    AgManagerPrivate *priv = manager->priv;
+    guint id;
 
-    dbus_error_init (&error);
-    dbus_bus_add_match (priv->dbus_conn,
-                        "type='signal',interface='" AG_DBUS_IFACE "'",
-                        &error);
-    if (G_UNLIKELY (dbus_error_is_set (&error)))
-    {
-        g_warning ("Failed to add dbus filter (%s)", error.message);
-        dbus_error_free (&error);
-        return FALSE;
-    }
-    return TRUE;
+    id = g_dbus_connection_signal_subscribe (priv->dbus_conn,
+                                             NULL,
+                                             AG_DBUS_IFACE,
+                                             AG_DBUS_SIG_CHANGED,
+                                             NULL,
+                                             NULL,
+                                             G_DBUS_SIGNAL_FLAGS_NONE,
+                                             dbus_filter_callback,
+                                             manager,
+                                             NULL);
+    priv->subscription_ids =
+        g_slist_prepend (priv->subscription_ids, GUINT_TO_POINTER (id));
 }
 
 static gboolean
 setup_dbus (AgManager *manager)
 {
     AgManagerPrivate *priv = manager->priv;
-    DBusError error;
-    gboolean ret;
+    GError *error = NULL;
 
-    dbus_error_init (&error);
-    priv->dbus_conn = dbus_bus_get (DBUS_BUS_SESSION, &error);
-    if (G_UNLIKELY (dbus_error_is_set (&error)))
+    priv->dbus_conn = g_bus_get_sync (G_BUS_TYPE_SESSION, NULL, &error);
+    if (G_UNLIKELY (error != NULL))
     {
-        g_warning ("Failed to get D-Bus connection (%s)", error.message);
-        dbus_error_free (&error);
-        return FALSE;
-    }
-
-    ret = dbus_connection_add_filter (priv->dbus_conn,
-                                      dbus_filter_callback,
-                                      manager, NULL);
-    if (G_UNLIKELY (!ret))
-    {
-        g_warning ("Failed to add dbus filter");
+        g_warning ("Failed to get D-Bus connection (%s)", error->message);
+        g_error_free (error);
         return FALSE;
     }
 
     if (priv->service_type == NULL)
     {
         /* listen to all changes */
-        ret = add_typeless_match (priv);
-        if (G_UNLIKELY (!ret)) return FALSE;
+        add_typeless_match (manager);
     }
     else
     {
@@ -1326,11 +1273,9 @@ setup_dbus (AgManager *manager)
         g_ptr_array_add (priv->object_paths,
                          g_strdup (AG_DBUS_PATH_SERVICE_GLOBAL));
 
-        ret = add_matches (priv);
-        if (G_UNLIKELY (!ret)) return FALSE;
+        add_matches (manager);
     }
 
-    dbus_connection_setup_with_g_main (priv->dbus_conn, NULL);
     return TRUE;
 }
 
@@ -1430,6 +1375,21 @@ ag_manager_dispose (GObject *object)
         priv->locks = g_list_delete_link (priv->locks, priv->locks);
     }
 
+    if (priv->dbus_conn)
+    {
+        while (priv->subscription_ids)
+        {
+            guint id = GPOINTER_TO_UINT (priv->subscription_ids->data);
+            g_dbus_connection_signal_unsubscribe (priv->dbus_conn, id);
+            priv->subscription_ids =
+                g_slist_delete_link (priv->subscription_ids,
+                                     priv->subscription_ids);
+        }
+
+        g_object_unref (priv->dbus_conn);
+        priv->dbus_conn = NULL;
+    }
+
     G_OBJECT_CLASS (ag_manager_parent_class)->finalize (object);
 }
 
@@ -1437,13 +1397,6 @@ static void
 ag_manager_finalize (GObject *object)
 {
     AgManagerPrivate *priv = AG_MANAGER_PRIV (object);
-
-    if (priv->dbus_conn)
-    {
-        dbus_connection_remove_filter (priv->dbus_conn, dbus_filter_callback,
-                                       object);
-        dbus_connection_unref (priv->dbus_conn);
-    }
 
     g_ptr_array_free (priv->object_paths, TRUE);
 
@@ -2134,7 +2087,8 @@ ag_manager_list_services_by_type (AgManager *manager, const gchar *service_type)
 void
 _ag_manager_exec_transaction (AgManager *manager, const gchar *sql,
                               AgAccountChanges *changes, AgAccount *account,
-                              AgAccountStoreCb callback, gpointer user_data)
+                              GSimpleAsyncResult *async_result,
+                              GCancellable *cancellable)
 {
     AgManagerPrivate *priv = manager->priv;
     GError *error = NULL;
@@ -2152,21 +2106,17 @@ _ag_manager_exec_transaction (AgManager *manager, const gchar *sql,
     ret = sqlite3_step (priv->begin_stmt);
     if (ret == SQLITE_BUSY)
     {
-        if (callback)
-        {
-            StoreCbData *sd;
+        StoreCbData *sd;
 
-            sd = g_slice_new (StoreCbData);
-            sd->manager = manager;
-            sd->account = account;
-            sd->changes = changes;
-            sd->callback = callback;
-            sd->user_data = user_data;
-            sd->sql = g_strdup (sql);
-            sd->id = g_idle_add ((GSourceFunc)exec_transaction_idle, sd);
-            priv->locks = g_list_prepend (priv->locks, sd);
-            g_object_weak_ref (G_OBJECT (account), lost_weak_ref, sd);
-        }
+        sd = g_slice_new (StoreCbData);
+        sd->manager = manager;
+        sd->account = account;
+        sd->changes = changes;
+        sd->async_result = async_result;
+        sd->cancellable = cancellable;
+        sd->sql = g_strdup (sql);
+        sd->id = g_idle_add ((GSourceFunc)exec_transaction_idle, sd);
+        priv->locks = g_list_prepend (priv->locks, sd);
         return;
     }
 
@@ -2181,10 +2131,12 @@ _ag_manager_exec_transaction (AgManager *manager, const gchar *sql,
     exec_transaction (manager, account, sql, changes, &error);
 
 finish:
-    _ag_account_store_completed (account, changes,
-                                 callback, error, user_data);
-    if (error)
-        g_error_free (error);
+    if (error != NULL)
+    {
+        g_simple_async_result_take_error (async_result, error);
+    }
+
+    _ag_account_store_completed (account, changes);
 }
 
 void

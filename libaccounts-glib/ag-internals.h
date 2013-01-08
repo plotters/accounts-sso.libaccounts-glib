@@ -4,7 +4,7 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
- * Copyright (C) 2012 Canonical Ltd.
+ * Copyright (C) 2012-2013 Canonical Ltd.
  * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
@@ -32,7 +32,6 @@
 #include "ag-auth-data.h"
 #include "ag-debug.h"
 #include "ag-manager.h"
-#include <dbus/dbus.h>
 #include <sqlite3.h>
 #include <time.h>
 
@@ -49,6 +48,11 @@ G_BEGIN_DECLS
 #define MAX_SQLITE_BUSY_LOOP_TIME 5
 #define MAX_SQLITE_BUSY_LOOP_TIME_MS (MAX_SQLITE_BUSY_LOOP_TIME * 1000)
 
+#if GLIB_CHECK_VERSION (2, 30, 0)
+#else
+#define G_VALUE_INIT { 0, { { 0 } } }
+#endif
+
 typedef struct _AgAccountChanges AgAccountChanges;
 
 struct _AgAccountChanges {
@@ -62,20 +66,18 @@ struct _AgAccountChanges {
 
 G_GNUC_INTERNAL
 void _ag_account_store_completed (AgAccount *account,
-                                  AgAccountChanges *changes,
-                                  AgAccountStoreCb callback,
-                                  const GError *error, gpointer user_data);
+                                  AgAccountChanges *changes);
 
 G_GNUC_INTERNAL
 void _ag_account_done_changes (AgAccount *account, AgAccountChanges *changes);
 
 G_GNUC_INTERNAL
-DBusMessage *_ag_account_build_signal (AgAccount *account,
-                                       AgAccountChanges *changes,
-                                       const struct timespec *ts);
+GVariant *_ag_account_build_signal (AgAccount *account,
+                                    AgAccountChanges *changes,
+                                    const struct timespec *ts);
 G_GNUC_INTERNAL
 AgAccountChanges *_ag_account_changes_from_dbus (AgManager *manager,
-                                                 DBusMessageIter *iter,
+                                                 GVariant *v_services,
                                                  gboolean created,
                                                  gboolean deleted);
 
@@ -83,11 +85,12 @@ G_GNUC_INTERNAL
 GHashTable *_ag_account_get_service_changes (AgAccount *account,
                                              AgService *service);
 
+G_GNUC_INTERNAL
 void _ag_manager_exec_transaction (AgManager *manager, const gchar *sql,
                                    AgAccountChanges *changes,
                                    AgAccount *account,
-                                   AgAccountStoreCb callback,
-                                   gpointer user_data) G_GNUC_INTERNAL;
+                                   GSimpleAsyncResult *async_result,
+                                   GCancellable *cancellable);
 
 typedef gboolean (*AgQueryCallback) (sqlite3_stmt *stmt, gpointer user_data);
 
@@ -142,8 +145,8 @@ G_GNUC_INTERNAL
 GHashTable *_ag_service_load_default_settings (AgService *service);
 
 G_GNUC_INTERNAL
-const GValue *_ag_service_get_default_setting (AgService *service,
-                                               const gchar *key);
+GVariant *_ag_service_get_default_setting (AgService *service,
+                                           const gchar *key);
 
 G_GNUC_INTERNAL
 AgService *_ag_service_new (void);
@@ -157,11 +160,20 @@ struct _AgProvider {
     gchar *display_name;
     gchar *description;
     gchar *domains;
+    gchar *plugin_name;
     gchar *file_data;
+    GHashTable *default_settings;
 };
 
 G_GNUC_INTERNAL
 AgProvider *_ag_provider_new_from_file (const gchar *provider_name);
+
+G_GNUC_INTERNAL
+GHashTable *_ag_provider_load_default_settings (AgProvider *provider);
+
+G_GNUC_INTERNAL
+GVariant *_ag_provider_get_default_setting (AgProvider *provider,
+                                            const gchar *key);
 
 G_GNUC_INTERNAL
 GPtrArray *_ag_account_changes_get_service_types (AgAccountChanges *changes);

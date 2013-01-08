@@ -35,6 +35,21 @@ class Account(Accounts.Account):
     get_int = _get_int
     get_bool = _get_bool
 
+    def get_settings_iter(self, prefix=''):
+        return super().get_settings_iter(prefix)
+
+    def get_settings(self, prefix=''):
+        itr = self.get_settings_iter(prefix)
+        while True:
+            success, key, value = itr.next()
+            if success:
+                yield (key, value)
+            else:
+                break
+
+    def get_settings_dict(self, prefix=''):
+        return dict(self.get_settings(prefix))
+
     def __eq__(self, other):
         return self.id == other.id
     def __ne__(self, other):
@@ -66,4 +81,3 @@ class AccountService(Accounts.AccountService):
 
 AccountService = override(AccountService)
 __all__.append('AccountService')
-

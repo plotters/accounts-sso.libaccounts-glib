@@ -24,11 +24,16 @@ ag_account_select_service
 ag_account_set_display_name
 ag_account_set_enabled
 ag_account_set_value
+ag_account_get_variant
+ag_account_set_variant
 ag_account_settings_iter_init
+ag_account_settings_iter_get_next
 ag_account_settings_iter_next
 ag_account_settings_iter_free
 ag_account_sign
 ag_account_store
+ag_account_store_async
+ag_account_store_finish
 ag_account_store_blocking
 ag_account_supports_service
 ag_account_verify
@@ -65,6 +70,8 @@ ag_account_service_get_settings_iter
 ag_account_service_get_value
 ag_account_service_new
 ag_account_service_set_value
+ag_account_service_get_variant
+ag_account_service_set_variant
 ag_account_service_settings_iter_init
 ag_account_service_settings_iter_next
 ag_account_service_get_auth_data
@@ -88,6 +95,7 @@ AgAuthData
 ag_auth_data_get_credentials_id
 ag_auth_data_get_mechanism
 ag_auth_data_get_method
+ag_auth_data_get_login_parameters
 ag_auth_data_get_parameters
 ag_auth_data_insert_parameters
 ag_auth_data_ref
@@ -172,6 +180,7 @@ ag_provider_get_icon_name
 ag_provider_get_name
 ag_provider_get_domains_regex
 ag_provider_match_domain
+ag_provider_get_plugin_name
 ag_provider_list_free
 ag_provider_ref
 ag_provider_unref

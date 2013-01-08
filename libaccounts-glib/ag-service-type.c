@@ -274,6 +274,8 @@ ag_service_type_get_display_name (AgServiceType *service_type)
  * Get the description of the #AgServiceType.
  *
  * Returns: the description of @service_type, or %NULL upon failure.
+ *
+ * Since: 1.2
  */
 const gchar *
 ag_service_type_get_description (AgServiceType *service_type)
@@ -310,6 +312,7 @@ gboolean ag_service_type_has_tag (AgServiceType *service_type,
                                   const gchar *tag)
 {
     g_return_val_if_fail (service_type != NULL, FALSE);
+    if (service_type->tags == NULL) return FALSE;
     return g_hash_table_lookup_extended (service_type->tags, tag, NULL, NULL);
 }
 
@@ -327,6 +330,7 @@ gboolean ag_service_type_has_tag (AgServiceType *service_type,
 GList *ag_service_type_get_tags (AgServiceType *service_type)
 {
     g_return_val_if_fail (service_type != NULL, NULL);
+    if (service_type->tags == NULL) return NULL;
     return g_hash_table_get_keys (service_type->tags);
 }
 

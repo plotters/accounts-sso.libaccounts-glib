@@ -38,9 +38,17 @@ void ag_auth_data_unref (AgAuthData *self);
 guint ag_auth_data_get_credentials_id (AgAuthData *self);
 const gchar *ag_auth_data_get_method (AgAuthData *self);
 const gchar *ag_auth_data_get_mechanism (AgAuthData *self);
+
+#ifndef AG_DISABLE_DEPRECATED
+AG_DEPRECATED_FOR(ag_auth_data_get_login_parameters)
 GHashTable *ag_auth_data_get_parameters (AgAuthData *self);
 
+AG_DEPRECATED_FOR(ag_auth_data_get_login_parameters)
 void ag_auth_data_insert_parameters (AgAuthData *self, GHashTable *parameters);
+#endif
+
+GVariant *ag_auth_data_get_login_parameters (AgAuthData *self,
+                                             GVariant *extra_parameters);
 
 G_END_DECLS
 

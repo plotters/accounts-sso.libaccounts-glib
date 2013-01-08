@@ -61,7 +61,7 @@ parse_template (xmlTextReaderPtr reader, AgService *service)
 
     settings =
         g_hash_table_new_full (g_str_hash, g_str_equal,
-                               g_free, (GDestroyNotify)_ag_value_slice_free);
+                               g_free, (GDestroyNotify)g_variant_unref);
 
     ok = _ag_xml_parse_settings (reader, "", settings);
     if (G_UNLIKELY (!ok))
@@ -75,7 +75,8 @@ parse_template (xmlTextReaderPtr reader, AgService *service)
 }
 
 static gboolean
-parse_preview (xmlTextReaderPtr reader, AgService *service)
+parse_preview (G_GNUC_UNUSED xmlTextReaderPtr reader,
+               G_GNUC_UNUSED AgService *service)
 {
     /* TODO: implement */
     return TRUE;
@@ -207,11 +208,12 @@ copy_tags_from_type (AgService *service)
 {
     AgServiceType *type;
     GList *type_tags, *tag_list;
-    
+
     service->tags = g_hash_table_new_full (g_str_hash, g_str_equal,
                                            g_free, NULL);
     type = _ag_service_type_new_from_file (service->type);
-    g_return_if_fail (type != NULL);
+    if (G_UNLIKELY (type == NULL)) return;
+
     type_tags = ag_service_type_get_tags (type);
     for (tag_list = type_tags; tag_list != NULL; tag_list = tag_list->next)
         g_hash_table_insert (service->tags,
@@ -323,7 +325,7 @@ _ag_service_load_default_settings (AgService *service)
     return service->default_settings;
 }
 
-const GValue *
+GVariant *
 _ag_service_get_default_setting (AgService *service, const gchar *key)
 {
     GHashTable *settings;
@@ -376,6 +378,8 @@ ag_service_get_display_name (AgService *service)
  * Gets the description of the #AgService.
  *
  * Returns: the description of @service, or %NULL upon failure.
+ *
+ * Since: 1.2
  */
 const gchar *
 ag_service_get_description (AgService *service)

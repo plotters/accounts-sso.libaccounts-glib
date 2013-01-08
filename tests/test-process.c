@@ -23,13 +23,11 @@
  * 02110-1301 USA
  */
 
-/**
- * @example check_ag.c
- * Shows how to initialize the framework.
- */
+#define AG_DISABLE_DEPRECATION_WARNINGS
 
 #include "libaccounts-glib/ag-manager.h"
 #include "libaccounts-glib/ag-account.h"
+#include "libaccounts-glib/ag-service.h"
 #include "libaccounts-glib/ag-errors.h"
 
 #include <glib.h>

@@ -4,7 +4,7 @@
  * This file is part of libaccounts-glib
  *
  * Copyright (C) 2009-2010 Nokia Corporation.
- * Copyright (C) 2012 Canonical Ltd.
+ * Copyright (C) 2012-2013 Canonical Ltd.
  * Copyright (C) 2012 Intel Corporation.
  *
  * Contact: Alberto Mardegan <alberto.mardegan@canonical.com>
@@ -29,6 +29,8 @@
  * @example check_ag.c
  * Shows how to initialize the framework.
  */
+
+#define AG_DISABLE_DEPRECATION_WARNINGS
 
 #include "libaccounts-glib/ag-manager.h"
 #include "libaccounts-glib/ag-account.h"
@@ -74,6 +76,23 @@ typedef struct {
     gchar *service;
     gboolean enabled;
 } EnabledCbData;
+
+static gboolean
+quit_loop_on_timeout(gpointer user_data)
+{
+    GMainLoop *loop = user_data;
+    g_main_loop_quit (loop);
+    return FALSE;
+}
+
+static void
+run_main_loop_for_n_seconds(guint seconds)
+{
+    GMainLoop *loop = g_main_loop_new (NULL, FALSE);
+    g_timeout_add_seconds (seconds, quit_loop_on_timeout, loop);
+    g_main_loop_run (loop);
+    g_main_loop_unref (loop);
+}
 
 static gboolean
 test_strv_equal (const gchar **s1, const gchar **s2)
@@ -161,8 +180,12 @@ START_TEST(test_provider)
     const gchar *provider_name, *display_name;
     const gchar *description;
     const gchar *domains;
+    const gchar *plugin_name;
+    AgSettingSource source;
     AgProvider *provider;
-    GList *providers;
+    GVariant *variant;
+    GList *providers, *list;
+    gboolean found;
 
     g_type_init ();
     manager = ag_manager_new ();
@@ -189,18 +212,59 @@ START_TEST(test_provider)
     /* Test provider enumeration */
     providers = ag_manager_list_providers (manager);
     fail_unless (providers != NULL);
-    fail_unless (g_list_length (providers) == 1);
-    provider = providers->data;
+    fail_unless (g_list_length (providers) == 2);
 
-    display_name = ag_provider_get_display_name (provider);
-    fail_unless (g_strcmp0 (display_name, "My Provider") == 0);
+    found = FALSE;
+    for (list = providers; list != NULL; list = list->next)
+    {
+        provider = list->data;
+        display_name = ag_provider_get_display_name (provider);
+        if (g_strcmp0 (display_name, "My Provider") != 0) continue;
 
-    domains = ag_provider_get_domains_regex (provider);
-    fail_unless (g_strcmp0 (domains, ".*provider\\.com") == 0);
+        found = TRUE;
+        domains = ag_provider_get_domains_regex (provider);
+        fail_unless (g_strcmp0 (domains, ".*provider\\.com") == 0);
 
-    fail_unless (ag_provider_match_domain (provider, "www.provider.com"));
+        fail_unless (ag_provider_match_domain (provider, "www.provider.com"));
+
+        plugin_name = ag_provider_get_plugin_name (provider);
+        fail_unless (g_strcmp0 (plugin_name, "oauth2") == 0);
+    }
+
+    fail_unless (found);
 
     ag_provider_list_free (providers);
+
+    end_test ();
+}
+END_TEST
+
+START_TEST(test_provider_settings)
+{
+    AgSettingSource source;
+    AgProvider *provider;
+    GVariant *variant;
+
+    g_type_init ();
+    manager = ag_manager_new ();
+
+    account = ag_manager_create_account (manager, "MyProvider");
+    fail_unless (AG_IS_ACCOUNT (account),
+                 "Failed to create the AgAccount.");
+
+    /* Test provider default settings */
+    source = AG_SETTING_SOURCE_NONE;
+    variant = ag_account_get_variant (account, "login/server", &source);
+    fail_unless (source == AG_SETTING_SOURCE_PROFILE);
+    fail_unless (variant != NULL);
+    fail_unless (g_strcmp0 (g_variant_get_string (variant, NULL),
+                            "login.example.com") == 0);
+
+    source = AG_SETTING_SOURCE_NONE;
+    variant = ag_account_get_variant (account, "login/remember-me", &source);
+    fail_unless (source == AG_SETTING_SOURCE_PROFILE);
+    fail_unless (variant != NULL);
+    fail_unless (g_variant_get_boolean (variant) == TRUE);
 
     end_test ();
 }
@@ -282,44 +346,53 @@ START_TEST(test_store_locked)
     fail_unless (main_loop != NULL, "Callback invoked too early");
     g_debug ("Running loop");
     g_main_loop_run (main_loop);
+    sqlite3_close (db);
 }
 END_TEST
 
 static void
-account_store_locked_unref_cb (AgAccount *account, const GError *error,
+account_store_locked_cancel_cb (GObject *object, GAsyncResult *res,
                                gpointer user_data)
 {
-    const gchar *string = user_data;
+    gboolean *called = user_data;
+    GError *error = NULL;
 
     g_debug ("%s called", G_STRFUNC);
+
+    ag_account_store_finish (AG_ACCOUNT (object), res, &error);
     fail_unless (error != NULL, "Account disposed but no error set!");
-    fail_unless (error->code == AG_ERROR_DISPOSED,
+    fail_unless (error->domain == G_IO_ERROR, "Wrong error domain");
+    fail_unless (error->code == G_IO_ERROR_CANCELLED,
                  "Got a different error code");
-    fail_unless (g_strcmp0 (string, TEST_STRING) == 0, "Got wrong string");
+    g_error_free (error);
+    *called = TRUE;
 }
 
-static void
-release_lock_unref (sqlite3 *db)
+static gboolean
+release_lock_cancel (sqlite3 *db)
 {
     g_debug ("releasing lock");
     sqlite3_exec (db, "COMMIT;", NULL, NULL, NULL);
 
     end_test ();
-}
-
-static gboolean
-unref_account (gpointer user_data)
-{
-    g_debug ("Unreferencing account %p", account);
-    fail_unless (AG_IS_ACCOUNT (account), "Account disposed?");
-    g_object_unref (account);
-    account = NULL;
     return FALSE;
 }
 
-START_TEST(test_store_locked_unref)
+static gboolean
+cancel_store (gpointer user_data)
+{
+    GCancellable *cancellable = user_data;
+
+    g_debug ("Cancelling %p", cancellable);
+    g_cancellable_cancel (cancellable);
+    return FALSE;
+}
+
+START_TEST(test_store_locked_cancel)
 {
     sqlite3 *db;
+    GCancellable *cancellable;
+    gboolean cb_called = FALSE;
 
     g_type_init ();
     manager = ag_manager_new ();
@@ -331,12 +404,16 @@ START_TEST(test_store_locked_unref)
     sqlite3_exec (db, "BEGIN EXCLUSIVE", NULL, NULL, NULL);
 
     main_loop = g_main_loop_new (NULL, FALSE);
-    ag_account_store (account, account_store_locked_unref_cb, TEST_STRING);
-    g_timeout_add (10, (GSourceFunc)unref_account, NULL);
-    g_timeout_add (20, (GSourceFunc)release_lock_unref, db);
+    cancellable = g_cancellable_new ();
+    ag_account_store_async (account, cancellable, account_store_locked_cancel_cb, &cb_called);
+    g_timeout_add (10, (GSourceFunc)cancel_store, cancellable);
+    g_timeout_add (20, (GSourceFunc)release_lock_cancel, db);
     fail_unless (main_loop != NULL, "Callback invoked too early");
     g_debug ("Running loop");
     g_main_loop_run (main_loop);
+    fail_unless (cb_called, "Callback not invoked");
+    sqlite3_close (db);
+    g_object_unref (cancellable);
 }
 END_TEST
 
@@ -372,6 +449,7 @@ START_TEST(test_account_service)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     service = ag_manager_get_service (manager, "MyService");
@@ -383,6 +461,21 @@ START_TEST(test_account_service)
     account_service = ag_account_service_new (account, service);
     fail_unless (AG_IS_ACCOUNT_SERVICE (account_service),
                  "Failed to create AccountService");
+
+    /* test the readable properties */
+    {
+        AgAccount *account_prop = NULL;
+        AgService *service_prop = NULL;
+
+        g_object_get (account_service,
+                      "account", &account_prop,
+                      "service", &service_prop,
+                      NULL);
+        fail_unless (account_prop == account);
+        fail_unless (service_prop == service);
+        g_object_unref (account_prop);
+        ag_service_unref (service_prop);
+    }
 
     /* test getting default setting from template */
     g_value_init (&value, G_TYPE_INT);
@@ -448,6 +541,7 @@ START_TEST(test_account_service_enabledness)
                  "Failed to create AccountService");
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
     account_id = account->id;
 
@@ -460,9 +554,13 @@ START_TEST(test_account_service_enabledness)
     ag_account_set_enabled (account, TRUE);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* Still disabled, because the account is disabled */
+    fail_unless (service_enabled == FALSE);
+    service_enabled = TRUE;
+    g_object_get (account_service, "enabled", &service_enabled, NULL);
     fail_unless (service_enabled == FALSE);
 
     /* enable the account */
@@ -470,8 +568,12 @@ START_TEST(test_account_service_enabledness)
     ag_account_set_enabled (account, TRUE);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
+    fail_unless (service_enabled == TRUE);
+    service_enabled = FALSE;
+    g_object_get (account_service, "enabled", &service_enabled, NULL);
     fail_unless (service_enabled == TRUE);
 
     g_object_unref (account_service);
@@ -514,6 +616,7 @@ START_TEST(test_account_service_enabledness)
     ag_account_set_enabled (account, FALSE);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (service_enabled == FALSE);
@@ -589,6 +692,7 @@ START_TEST(test_account_service_settings)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* The callback for the "changed" signal should have been emitted.
@@ -623,6 +727,7 @@ START_TEST(test_account_service_settings)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* The callback for the "changed" signal should have been emitted.
@@ -688,6 +793,7 @@ START_TEST(test_account_service_list)
         ag_account_set_enabled (account, TRUE);
         ag_account_set_display_name (account, display_name);
         ag_account_store (account, account_store_now_cb, TEST_STRING);
+        run_main_loop_for_n_seconds(0);
         fail_unless (data_stored, "Callback not invoked immediately");
         account_id[i] = account->id;
         g_object_unref (account);
@@ -724,6 +830,7 @@ START_TEST(test_account_service_list)
     ag_account_select_service (account, my_service2);
     ag_account_set_enabled (account, FALSE);
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     account = ag_manager_get_account (manager, account_id[1]);
@@ -734,6 +841,7 @@ START_TEST(test_account_service_list)
     ag_account_select_service (account, my_service2);
     ag_account_set_enabled (account, FALSE);
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     account = ag_manager_get_account (manager, account_id[2]);
@@ -743,6 +851,7 @@ START_TEST(test_account_service_list)
     ag_account_select_service (account, my_service2);
     ag_account_set_enabled (account, TRUE);
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     g_object_unref (manager);
@@ -889,6 +998,7 @@ START_TEST(test_auth_data)
     ag_account_select_service (account, my_service);
     ag_account_set_enabled (account, TRUE);
     write_strings_to_account (account, key_prefix, service_params);
+    g_free (key_prefix);
 
     g_value_init (&value, G_TYPE_UINT);
     g_value_set_uint (&value, credentials_id);
@@ -906,6 +1016,7 @@ START_TEST(test_auth_data)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
     account_id = account->id;
     g_object_unref (account);
@@ -929,6 +1040,7 @@ START_TEST(test_auth_data)
     check_string_in_params (params, "id", "123");
     check_string_in_params (params, "display", "mobile");
     check_string_in_params (params, "service", TEST_SERVICE_VALUE);
+    check_string_in_params (params, "from-provider", "yes");
 
     ag_auth_data_unref (data);
     g_object_unref (account_service);
@@ -938,6 +1050,92 @@ START_TEST(test_auth_data)
 }
 END_TEST
 
+static void
+check_variant_in_dict (GVariant *dict, const gchar *key,
+                       GVariant *expected)
+{
+    GVariant *actual;
+    gboolean equal;
+
+    actual = g_variant_lookup_value (dict, key, NULL);
+    if (actual == NULL)
+    {
+        if (expected == NULL) return;
+        fail ("Key %s is missing", key);
+    }
+
+    if (!g_variant_equal(actual, expected))
+    {
+        fail ("Values differ for key %s! Expected %s, actual %s", key,
+              g_variant_print (expected, TRUE),
+              g_variant_print (actual, TRUE));
+    }
+
+    g_variant_ref_sink (expected);
+    g_variant_unref (expected);
+    g_variant_unref (actual);
+}
+
+START_TEST(test_auth_data_get_login_parameters)
+{
+    GList *account_services;
+    AgAccountService *account_service;
+    AgService *my_service;
+    AgAuthData *data;
+    GVariant *params, *variant;
+    GVariantBuilder builder;
+    const gchar *display = "desktop";
+    const gchar *animal = "cat";
+
+    g_type_init ();
+
+    manager = ag_manager_new_for_service_type ("e-mail");
+
+    /* reload the account and get the AccountService */
+    account_services = ag_manager_get_account_services (manager);
+    fail_unless (g_list_length(account_services) == 1);
+    account_service = AG_ACCOUNT_SERVICE (account_services->data);
+    fail_unless (AG_IS_ACCOUNT_SERVICE (account_service));
+
+    /* get the auth data */
+    data = ag_account_service_get_auth_data (account_service);
+    fail_unless (data != NULL);
+
+    /* add an application setting */
+    params = ag_auth_data_get_login_parameters (data, NULL);
+    fail_unless (params != NULL);
+
+    check_variant_in_dict (params, "id", g_variant_new_string ("123"));
+    check_variant_in_dict (params, "display",
+                           g_variant_new_string ("mobile"));
+    check_variant_in_dict (params, "service",
+                           g_variant_new_string (TEST_SERVICE_VALUE));
+    g_variant_unref (params);
+
+    /* Try adding some client parameters */
+    g_variant_builder_init (&builder, G_VARIANT_TYPE_VARDICT);
+    g_variant_builder_add (&builder, "{sv}",
+                           "display", g_variant_new_string (display));
+    g_variant_builder_add (&builder, "{sv}",
+                           "animal", g_variant_new_string (animal));
+
+    variant = g_variant_builder_end (&builder);
+    params = ag_auth_data_get_login_parameters (data, variant);
+    check_variant_in_dict (params, "id", g_variant_new_string ("123"));
+    check_variant_in_dict (params, "display",
+                           g_variant_new_string (display));
+    check_variant_in_dict (params, "service",
+                           g_variant_new_string (TEST_SERVICE_VALUE));
+    check_variant_in_dict (params, "animal",
+                           g_variant_new_string (animal));
+    g_variant_unref (params);
+
+    ag_auth_data_unref (data);
+    g_object_unref (account_service);
+
+    end_test ();
+}
+END_TEST
 START_TEST(test_auth_data_insert_parameters)
 {
     GList *account_services;
@@ -952,14 +1150,11 @@ START_TEST(test_auth_data_insert_parameters)
 
     g_type_init ();
 
-    manager = ag_manager_new ();
-
-    my_service = ag_manager_get_service (manager, "MyService");
-    fail_unless (my_service != NULL);
+    manager = ag_manager_new_for_service_type ("e-mail");
 
     /* reload the account and get the AccountService */
     account_services = ag_manager_get_account_services (manager);
-    fail_unless (account_services != NULL);
+    fail_unless (g_list_length(account_services) == 1);
     account_service = AG_ACCOUNT_SERVICE (account_services->data);
     fail_unless (AG_IS_ACCOUNT_SERVICE (account_service));
 
@@ -992,7 +1187,6 @@ START_TEST(test_auth_data_insert_parameters)
 
     ag_auth_data_unref (data);
     g_object_unref (account_service);
-    ag_service_unref (my_service);
 
     end_test ();
 }
@@ -1214,6 +1408,7 @@ START_TEST(test_service)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     g_debug ("Service id: %d", service->id);
@@ -1312,6 +1507,7 @@ START_TEST(test_service)
     ag_account_set_enabled (account, TRUE);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (ag_account_get_enabled (account) == TRUE,
@@ -1385,6 +1581,9 @@ START_TEST(test_signals)
     const gchar *display_name = "My lovely account";
     gboolean enabled_called = FALSE;
     gboolean display_name_called = FALSE;
+    gboolean notify_enabled_called = FALSE;
+    gboolean notify_display_name_called = FALSE;
+    gboolean enabled = FALSE;
 
     g_type_init ();
 
@@ -1397,16 +1596,28 @@ START_TEST(test_signals)
     g_signal_connect_swapped (account, "display-name-changed",
                               G_CALLBACK (set_boolean_variable),
                               &display_name_called);
+    g_signal_connect_swapped (account, "notify::enabled",
+                              G_CALLBACK (set_boolean_variable),
+                              &notify_enabled_called);
+    g_signal_connect_swapped (account, "notify::display-name",
+                              G_CALLBACK (set_boolean_variable),
+                              &notify_display_name_called);
 
     ag_account_set_enabled (account, TRUE);
     ag_account_set_display_name (account, display_name);
 
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (enabled_called, "Enabled signal not emitted!");
     fail_unless (display_name_called, "DisplayName signal not emitted!");
+    fail_unless (notify_enabled_called, "Enabled property not notified!");
+    g_object_get (account, "enabled", &enabled, NULL);
+    fail_unless (enabled == TRUE, "Account not enabled!");
+    fail_unless (notify_display_name_called,
+                 "DisplayName property not notified!");
 
     end_test ();
 }
@@ -1430,9 +1641,28 @@ START_TEST(test_list)
     ag_account_set_display_name (account, display_name);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account->id != 0, "Account ID is still 0!");
+
+    /* Test the account readable properties */
+    {
+        AgAccountId id_prop = 0;
+        AgManager *manager_prop = NULL;
+        gchar *provider_prop = NULL;
+
+        g_object_get (account,
+                      "id", &id_prop,
+                      "manager", &manager_prop,
+                      "provider", &provider_prop,
+                      NULL);
+        fail_unless (id_prop == account->id);
+        fail_unless (manager_prop == manager);
+        fail_unless (g_strcmp0 (provider_prop, PROVIDER) == 0);
+        g_object_unref (manager);
+        g_free (provider_prop);
+    }
 
     list = ag_manager_list (manager);
     fail_unless (list != NULL, "Empty list");
@@ -1467,6 +1697,7 @@ START_TEST(test_list)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* check that the service is now there */
@@ -1480,7 +1711,7 @@ START_TEST(test_list)
 }
 END_TEST
 
-START_TEST(test_settings_iter)
+START_TEST(test_settings_iter_gvalue)
 {
     const gchar *keys[] = {
         "param/address",
@@ -1523,6 +1754,7 @@ START_TEST(test_settings_iter)
     n_values = i;
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account->id != 0, "Account ID is still 0!");
@@ -1617,6 +1849,7 @@ START_TEST(test_settings_iter)
 
     /* save */
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* enumerate the parameters */
@@ -1633,6 +1866,171 @@ START_TEST(test_settings_iter)
             gint port;
 
             port = g_value_get_int (val);
+            fail_unless (port == new_port_value,
+                         "Got value %d for key %s, expecting %d",
+                         port, key, new_port_value);
+        }
+
+        n_read++;
+    }
+
+    fail_unless (n_read == 5, "Not all settings were retrieved");
+
+
+    end_test ();
+}
+END_TEST
+
+START_TEST(test_settings_iter)
+{
+    const gchar *keys[] = {
+        "param/address",
+        "weight",
+        "param/city",
+        "age",
+        "param/country",
+        NULL,
+    };
+    const gchar *values[] = {
+        "Helsinginkatu",
+        "110",
+        "Helsinki",
+        "90",
+        "Suomi",
+        NULL,
+    };
+    const gchar *service_name = "OtherService";
+    AgAccountSettingIter iter;
+    const gchar *key;
+    GVariant *val;
+    gint i, n_values, n_read;
+    const gint new_port_value = 32412;
+
+    g_type_init ();
+
+    manager = ag_manager_new ();
+    account = ag_manager_create_account (manager, PROVIDER);
+
+    ag_account_set_enabled (account, TRUE);
+
+    for (i = 0; keys[i] != NULL; i++)
+    {
+        ag_account_set_variant (account, keys[i],
+                                g_variant_new_string (values[i]));
+    }
+    n_values = i;
+
+    ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
+    fail_unless (data_stored, "Callback not invoked immediately");
+
+    fail_unless (account->id != 0, "Account ID is still 0!");
+
+    /* iterate the settings */
+    n_read = 0;
+    ag_account_settings_iter_init (account, &iter, NULL);
+    while (ag_account_settings_iter_get_next (&iter, &key, &val))
+    {
+        gboolean found = FALSE;
+        for (i = 0; keys[i] != NULL; i++)
+        {
+            if (g_strcmp0 (key, keys[i]) == 0)
+            {
+                const gchar *text;
+                found = TRUE;
+                text = g_variant_get_string (val, NULL);
+                fail_unless (g_strcmp0 (values[i], text) == 0,
+                             "Got value %s for key %s, expecting %s",
+                             text, key, values[i]);
+                break;
+            }
+        }
+
+        fail_unless (found, "Unknown setting %s", key);
+
+        n_read++;
+    }
+
+    fail_unless (n_read == n_values,
+                 "Not all settings were retrieved (%d out of %d)",
+                 n_read, n_values);
+
+    /* iterate settings with prefix */
+    n_read = 0;
+    ag_account_settings_iter_init (account, &iter, "param/");
+    while (ag_account_settings_iter_get_next (&iter, &key, &val))
+    {
+        gboolean found = FALSE;
+        gchar *full_key;
+        fail_unless (strncmp (key, "param/", 6) != 0,
+                     "Got key with unstripped prefix (%s)", key);
+
+        full_key = g_strconcat ("param/", key, NULL);
+        for (i = 0; keys[i] != NULL; i++)
+        {
+            if (g_strcmp0 (full_key, keys[i]) == 0)
+            {
+                const gchar *text;
+                found = TRUE;
+                text = g_variant_get_string (val, NULL);
+                fail_unless (g_strcmp0 (values[i], text) == 0,
+                             "Got value %s for key %s, expecting %s",
+                             text, key, values[i]);
+                break;
+            }
+        }
+        g_free (full_key);
+
+        fail_unless (found, "Unknown setting %s", key);
+
+        n_read++;
+    }
+
+    fail_unless (n_read == 3, "Not all settings were retrieved");
+
+    /* iterate template default settings */
+    service = ag_manager_get_service (manager, service_name);
+    ag_account_select_service (account, service);
+    n_read = 0;
+    ag_account_settings_iter_init (account, &iter, NULL);
+    while (ag_account_settings_iter_get_next (&iter, &key, &val))
+    {
+        g_debug ("Got key %s of type %s",
+                 key, g_variant_get_type_string (val));
+
+        n_read++;
+    }
+    fail_unless (n_read == 4, "Not all settings were retrieved");
+
+    /* Add a setting that is also on the template, to check if it will
+     * override the one on the template */
+    ag_account_set_variant (account, "parameters/port",
+                            g_variant_new_int16 (new_port_value));
+
+    /* Add a setting */
+    ag_account_set_variant (account, "parameters/message",
+                            g_variant_new_string ("How's life?"));
+
+    /* save */
+    ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
+    fail_unless (data_stored, "Callback not invoked immediately");
+
+    /* enumerate the parameters */
+    n_read = 0;
+    ag_account_settings_iter_init (account, &iter, "parameters/");
+    while (ag_account_settings_iter_get_next (&iter, &key, &val))
+    {
+        fail_unless (strncmp (key, "parameters/", 6) != 0,
+                     "Got key with unstripped prefix (%s)", key);
+
+        g_debug ("Got key %s of type %s",
+                 key, g_variant_get_type_string (val));
+        if (g_strcmp0 (key, "port") == 0)
+        {
+            gint port;
+
+            port = g_variant_get_int16 (val);
             fail_unless (port == new_port_value,
                          "Got value %d for key %s, expecting %d",
                          port, key, new_port_value);
@@ -1754,6 +2152,7 @@ START_TEST(test_delete)
     account = ag_manager_create_account (manager, PROVIDER);
     ag_account_set_enabled (account, TRUE);
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account->id != 0, "Account ID is still 0!");
@@ -1778,6 +2177,7 @@ START_TEST(test_delete)
 
     /* really delete the account */
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* check that the signals are emitted */
@@ -1860,6 +2260,7 @@ START_TEST(test_watches)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* if we didn't change the server, make sure the callback is not
@@ -1891,6 +2292,7 @@ START_TEST(test_watches)
     port_changed = FALSE;
     dir_changed = FALSE;
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* make sure the callback for the server is invoked */
@@ -2007,6 +2409,16 @@ START_TEST(test_concurrency)
     display_name = ag_account_get_display_name (account);
     fail_unless (g_strcmp0 (display_name, "MyAccountName") == 0,
                  "Wrong display name '%s'", display_name);
+
+    {
+        gchar *allocated_display_name = NULL;
+        g_object_get (account,
+                      "display-name", &allocated_display_name,
+                      NULL);
+        fail_unless (g_strcmp0 (allocated_display_name, "MyAccountName") == 0,
+                     "Wrong display name '%s'", allocated_display_name);
+        g_free (allocated_display_name);
+    }
 
     /* check deletion */
     g_signal_connect (manager, "account-deleted",
@@ -2148,6 +2560,7 @@ START_TEST(test_concurrency)
     fail_unless (ecd.called == TRUE);
     fail_unless (ecd.enabled == TRUE);
     fail_unless (g_strcmp0 (ecd.service, "MyService") == 0);
+    g_free (ecd.service);
 
     end_test ();
 }
@@ -2208,6 +2621,7 @@ START_TEST(test_service_regression)
     g_value_unset (&value);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     g_debug ("Service id: %d", service->id);
@@ -2393,6 +2807,7 @@ START_TEST(test_sign_verify_key)
     ag_account_sign (account, key2, token);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account->id != 0, "Account ID is still 0!");
@@ -2430,6 +2845,7 @@ START_TEST(test_sign_verify_key)
     ag_account_sign (account, key2, token);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account->id != 0, "Account ID is still 0!");
@@ -2471,6 +2887,7 @@ START_TEST(test_cache_regression)
     ag_account_set_display_name (account, display_name1);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     account_id1 = account->id;
@@ -2479,6 +2896,7 @@ START_TEST(test_cache_regression)
     ag_account_delete (account);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* after deleting the account, we shouldn't get it anymore, even if we
@@ -2493,6 +2911,7 @@ START_TEST(test_cache_regression)
     ag_account_set_display_name (account, display_name2);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     account_id2 = account->id;
@@ -2545,9 +2964,11 @@ START_TEST(test_serviceid_regression)
     ag_account_set_enabled (account2, FALSE);
 
     ag_account_store (account1, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     ag_account_store (account2, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account1->id != 0);
@@ -2621,6 +3042,7 @@ START_TEST(test_delete_regression)
     ag_account_set_enabled (account, TRUE);
 
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account->id != 0, "Account ID is still 0!");
@@ -2647,6 +3069,7 @@ START_TEST(test_delete_regression)
 
     /* really delete the account */
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     /* check that the signals are emitted */
@@ -2654,6 +3077,57 @@ START_TEST(test_delete_regression)
     fail_unless (deleted_called, "Accound deleted signal not emitted");
 
     g_object_unref (account_service);
+
+    end_test ();
+}
+END_TEST
+
+static void
+on_account_created_count (AgManager *manager, AgAccountId account_id,
+                          gint *counter)
+{
+    g_debug ("%s called (%u), counter %d", G_STRFUNC, account_id, *counter);
+
+    (*counter)++;
+}
+
+START_TEST(test_duplicate_create_regression)
+{
+    gint create_signal_counter;
+
+    g_type_init ();
+
+    manager = ag_manager_new ();
+
+    g_signal_connect (manager, "account-created",
+                      G_CALLBACK (on_account_created_count),
+                      &create_signal_counter);
+
+    /* create an account */
+    account = ag_manager_create_account (manager, PROVIDER);
+    ag_account_set_enabled (account, TRUE);
+
+    service = ag_manager_get_service (manager, "MyService");
+    fail_unless (service != NULL);
+    ag_account_select_service (account, service);
+    ag_account_set_enabled (account, TRUE);
+    ag_service_unref(service);
+
+    service = ag_manager_get_service (manager, "MyService2");
+    fail_unless (service != NULL);
+    ag_account_select_service (account, service);
+    ag_account_set_enabled (account, TRUE);
+
+    create_signal_counter = 0;
+    ag_account_store_blocking (account, NULL);
+
+    main_loop = g_main_loop_new (NULL, FALSE);
+    source_id = g_timeout_add_seconds (2, quit_loop_on_timeout, main_loop);
+    g_debug ("Running loop");
+    g_main_loop_run (main_loop);
+
+    fail_unless(create_signal_counter == 1,
+                "account-created emitted %d times!", create_signal_counter);
 
     end_test ();
 }
@@ -2693,8 +3167,10 @@ START_TEST(test_manager_new_for_service_type)
     ag_account_set_enabled (account2, FALSE);
 
     ag_account_store (account1, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
     ag_account_store (account2, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     fail_unless (account1->id != 0);
@@ -2702,7 +3178,7 @@ START_TEST(test_manager_new_for_service_type)
 
     list = ag_manager_list_enabled_by_service_type (manager, "e-mail");
     fail_unless (g_list_length (list) == 1);
-    fail_unless (account1->id == GPOINTER_TO_INT(list->data));
+    fail_unless (account1->id == GPOINTER_TO_UINT(list->data));
 
     /* clear up */
     ag_service_unref (service1);
@@ -2753,6 +3229,9 @@ START_TEST(test_manager_enabled_event)
 
     g_type_init();
 
+    /* consume any still unprocessed D-Bus signals */
+    run_main_loop_for_n_seconds (2);
+
     /* delete the database */
     g_unlink (db_filename);
 
@@ -2767,6 +3246,7 @@ START_TEST(test_manager_enabled_event)
 
     ag_account_set_enabled (account, TRUE);
     ag_account_store (account, account_store_now_cb, TEST_STRING);
+    run_main_loop_for_n_seconds(0);
     fail_unless (data_stored, "Callback not invoked immediately");
 
     main_loop = g_main_loop_new (NULL, FALSE);
@@ -3141,20 +3621,26 @@ ag_suite(const char *test_case)
 
     tc = tcase_create("Create");
     tcase_add_test (tc, test_object);
-    tcase_add_test (tc, test_provider);
     IF_TEST_CASE_ENABLED("Create")
+        suite_add_tcase (s, tc);
+
+    tc = tcase_create("Provider");
+    tcase_add_test (tc, test_provider);
+    tcase_add_test (tc, test_provider_settings);
+    IF_TEST_CASE_ENABLED("Provider")
         suite_add_tcase (s, tc);
 
     tc = tcase_create("Store");
     tcase_add_test (tc, test_store);
     tcase_add_test (tc, test_store_locked);
-    tcase_add_test (tc, test_store_locked_unref);
+    tcase_add_test (tc, test_store_locked_cancel);
     IF_TEST_CASE_ENABLED("Store")
         suite_add_tcase (s, tc);
 
     tc = tcase_create("Service");
     tcase_add_test (tc, test_service);
     tcase_add_test (tc, test_account_services);
+    tcase_add_test (tc, test_settings_iter_gvalue);
     tcase_add_test (tc, test_settings_iter);
     tcase_add_test (tc, test_service_type);
     IF_TEST_CASE_ENABLED("Service")
@@ -3170,6 +3656,7 @@ ag_suite(const char *test_case)
 
     tc = tcase_create("AuthData");
     tcase_add_test (tc, test_auth_data);
+    tcase_add_test (tc, test_auth_data_get_login_parameters);
     tcase_add_test (tc, test_auth_data_insert_parameters);
     IF_TEST_CASE_ENABLED("AuthData")
         suite_add_tcase (s, tc);
@@ -3220,6 +3707,7 @@ ag_suite(const char *test_case)
     tcase_add_test (tc, test_serviceid_regression);
     tcase_add_test (tc, test_enabled_regression);
     tcase_add_test (tc, test_delete_regression);
+    tcase_add_test (tc, test_duplicate_create_regression);
     IF_TEST_CASE_ENABLED("Regression")
         suite_add_tcase (s, tc);
 

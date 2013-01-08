@@ -29,7 +29,6 @@
 #include "ag-debug.h"
 #include "ag-errors.h"
 
-#include <dbus/dbus.h>
 #include <gio/gio.h>
 #include <sched.h>
 #include <stdio.h>
@@ -75,13 +74,11 @@ _ag_value_slice_free (GValue *value)
     g_slice_free (GValue, value);
 }
 
-gchar *
-_ag_value_to_db (const GValue *in_value, gboolean type_annotate)
+GVariant *
+_ag_value_to_variant (const GValue *in_value)
 {
-    GVariant *variant;
-    const gchar *type;
-    gchar *string;
-    GValue transformed_value = { 0, };
+    const GVariantType *type;
+    GValue transformed_value = G_VALUE_INIT;
     const GValue *value;
 
     g_return_val_if_fail (in_value != NULL, NULL);
@@ -106,42 +103,39 @@ _ag_value_to_db (const GValue *in_value, gboolean type_annotate)
     }
 
     type = _ag_type_from_g_type (G_VALUE_TYPE (value));
-    variant = g_dbus_gvalue_to_gvariant (value, (GVariantType *)type);
-    if (G_UNLIKELY (variant == NULL))
-    {
-        g_warning ("%s: unsupported type ``%s''", G_STRFUNC, type);
-        return NULL;
-    }
-
-    string = g_variant_print (variant, type_annotate);
-    g_variant_unref (variant);
-    return string;
+    return g_dbus_gvalue_to_gvariant (value, type);
 }
 
-const gchar *
+gchar *
+_ag_value_to_db (GVariant *value, gboolean type_annotate)
+{
+    return g_variant_print (value, type_annotate);
+}
+
+const GVariantType *
 _ag_type_from_g_type (GType type)
 {
     switch (type)
     {
     case G_TYPE_STRING:
-        return DBUS_TYPE_STRING_AS_STRING;
+        return G_VARIANT_TYPE_STRING;
     case G_TYPE_INT:
     case G_TYPE_CHAR:
-        return DBUS_TYPE_INT32_AS_STRING;
+        return G_VARIANT_TYPE_INT32;
     case G_TYPE_UINT:
-        return DBUS_TYPE_UINT32_AS_STRING;
+        return G_VARIANT_TYPE_UINT32;
     case G_TYPE_BOOLEAN:
-        return DBUS_TYPE_BOOLEAN_AS_STRING;
+        return G_VARIANT_TYPE_BOOLEAN;
     case G_TYPE_UCHAR:
-        return DBUS_TYPE_BYTE_AS_STRING;
+        return G_VARIANT_TYPE_BYTE;
     case G_TYPE_INT64:
-        return DBUS_TYPE_INT64_AS_STRING;
+        return G_VARIANT_TYPE_INT64;
     case G_TYPE_UINT64:
-        return DBUS_TYPE_UINT64_AS_STRING;
+        return G_VARIANT_TYPE_UINT64;
     default:
         /* handle dynamic types here */
         if (type == G_TYPE_STRV)
-            return DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING;
+            return G_VARIANT_TYPE_STRING_ARRAY;
 
         g_warning ("%s: unsupported type ``%s''", G_STRFUNC,
                    g_type_name (type));
@@ -149,45 +143,19 @@ _ag_type_from_g_type (GType type)
     }
 }
 
-GType
-_ag_type_to_g_type (const gchar *type_str)
+void
+_ag_value_from_variant (GValue *value, GVariant *variant)
 {
-    g_return_val_if_fail (type_str != NULL, G_TYPE_INVALID);
-
-    switch (type_str[0])
-    {
-    case DBUS_TYPE_STRING:
-        return G_TYPE_STRING;
-    case DBUS_TYPE_INT32:
-        return G_TYPE_INT;
-    case DBUS_TYPE_UINT32:
-        return G_TYPE_UINT;
-    case DBUS_TYPE_INT64:
-        return G_TYPE_INT64;
-    case DBUS_TYPE_UINT64:
-        return G_TYPE_UINT64;
-    case DBUS_TYPE_BOOLEAN:
-        return G_TYPE_BOOLEAN;
-    case DBUS_TYPE_BYTE:
-        return G_TYPE_UCHAR;
-    case DBUS_TYPE_ARRAY:
-        if (type_str[1] == DBUS_TYPE_STRING)
-            return G_TYPE_STRV;
-        // fall through
-    default:
-        g_warning ("%s: unsupported type ``%s''", G_STRFUNC, type_str);
-        return G_TYPE_INVALID;
-    }
+    g_dbus_gvariant_to_gvalue (variant, value);
 }
 
-static gboolean
-_ag_value_set_from_string (GValue *value, const gchar *type,
-                           const gchar *string)
+static GVariant *
+_ag_value_from_string (const gchar *type, const gchar *string)
 {
     GVariant *variant;
     GError *error = NULL;
 
-    if (G_UNLIKELY (!string)) return FALSE;
+    if (G_UNLIKELY (!string)) return NULL;
 
     /* g_variant_parse() expects all strings to be enclosed in quotes, which we
      * wouldn't like to enforce in the XML files. So, if we know that we are
@@ -195,9 +163,7 @@ _ag_value_set_from_string (GValue *value, const gchar *type,
     if (type != NULL && type[0] == 's' && type[1] == '\0' &&
         string[0] != '"' && string[0] != '\'')
     {
-        g_value_init (value, G_TYPE_STRING);
-        g_value_set_string (value, string);
-        return TRUE;
+        return g_variant_new_string (string);
     }
 
     variant = g_variant_parse ((GVariantType *)type, string,
@@ -207,35 +173,22 @@ _ag_value_set_from_string (GValue *value, const gchar *type,
         g_warning ("%s: error parsing type \"%s\" ``%s'': %s",
                    G_STRFUNC, type, string, error->message);
         g_error_free (error);
-        return FALSE;
+        return NULL;
     }
 
-    g_dbus_gvariant_to_gvalue (variant, value);
-    g_variant_unref (variant);
-
-    return TRUE;
+    return variant;
 }
 
-GValue *
+GVariant *
 _ag_value_from_db (sqlite3_stmt *stmt, gint col_type, gint col_value)
 {
-    GValue *value;
     gchar *string_value;
     gchar *type;
-    gboolean ok;
 
     type = (gchar *)sqlite3_column_text (stmt, col_type);
     string_value = (gchar *)sqlite3_column_text (stmt, col_value);
 
-    value = g_slice_new0 (GValue);
-    ok = _ag_value_set_from_string (value, type, string_value);
-    if (G_UNLIKELY (!ok))
-    {
-        g_slice_free (GValue, value);
-        return NULL;
-    }
-
-    return value;
+    return _ag_value_from_string (type, string_value);
 }
 
 /**
@@ -273,72 +226,6 @@ GQuark
 ag_accounts_error_quark (void)
 {
     return ag_errors_quark ();
-}
-
-static void
-ag_value_append (DBusMessageIter *iter, const GValue *value)
-{
-    DBusMessageIter var;
-    gchar *val_str;
-
-    val_str = _ag_value_to_db (value, TRUE);
-
-    dbus_message_iter_open_container (iter, DBUS_TYPE_VARIANT,
-                                      DBUS_TYPE_STRING_AS_STRING, &var);
-    dbus_message_iter_append_basic (&var, DBUS_TYPE_STRING, &val_str);
-    dbus_message_iter_close_container (iter, &var);
-
-    g_free (val_str);
-}
-
-void
-_ag_iter_append_dict_entry (DBusMessageIter *iter, const gchar *key,
-                            const GValue *value)
-{
-    DBusMessageIter args;
-
-    dbus_message_iter_open_container (iter, DBUS_TYPE_DICT_ENTRY, NULL, &args);
-    dbus_message_iter_append_basic (&args, DBUS_TYPE_STRING, &key);
-
-    ag_value_append (&args, value);
-    dbus_message_iter_close_container (iter, &args);
-}
-
-static gboolean
-_ag_iter_get_value (DBusMessageIter *iter, GValue *value)
-{
-    DBusMessageIter var;
-    const gchar *val_str;
-
-    dbus_message_iter_recurse (iter, &var);
-
-    /* the values are always passed as strings, in the GVariant text format. */
-    if (dbus_message_iter_get_arg_type (&var) != DBUS_TYPE_STRING)
-        return FALSE;
-
-    dbus_message_iter_get_basic (&var, &val_str);
-    return _ag_value_set_from_string (value, NULL, val_str);
-}
-
-gboolean
-_ag_iter_get_dict_entry (DBusMessageIter *iter, const gchar **key,
-                         GValue *value)
-{
-    DBusMessageIter args;
-
-    dbus_message_iter_recurse (iter, &args);
-    if (G_UNLIKELY (dbus_message_iter_get_arg_type (&args) !=
-                    DBUS_TYPE_STRING))
-        return FALSE;
-
-    dbus_message_iter_get_basic (&args, key);
-    dbus_message_iter_next (&args);
-
-    if (G_UNLIKELY (dbus_message_iter_get_arg_type (&args) !=
-                    DBUS_TYPE_VARIANT))
-        return FALSE;
-
-    return _ag_iter_get_value (&args, value);
 }
 
 gboolean
@@ -389,7 +276,7 @@ _ag_xml_dup_element_data (xmlTextReaderPtr reader, gchar **dest_ptr)
 }
 
 static gboolean
-parse_param (xmlTextReaderPtr reader, GValue *value)
+parse_param (xmlTextReaderPtr reader, GVariant **value)
 {
     const gchar *str_value;
     xmlChar *str_type = NULL;
@@ -411,8 +298,7 @@ parse_param (xmlTextReaderPtr reader, GValue *value)
     /* Empty value is not an error, but simply ignored */
     if (G_UNLIKELY (!str_value)) goto finish;
 
-    ok = _ag_value_set_from_string (value, type, str_value);
-    if (G_UNLIKELY (!ok)) goto error;
+    *value = _ag_value_from_string (type, str_value);
 
     ok = close_element (reader);
     if (G_UNLIKELY (!ok)) goto error;
@@ -449,7 +335,7 @@ _ag_xml_parse_settings (xmlTextReaderPtr reader, const gchar *group,
             DEBUG_INFO ("found name %s", name);
             if (strcmp (name, "setting") == 0)
             {
-                GValue value = { 0 }, *pval;
+                GVariant *value = NULL;
                 xmlChar *key_name;
                 gchar *key;
 
@@ -459,19 +345,13 @@ _ag_xml_parse_settings (xmlTextReaderPtr reader, const gchar *group,
                 if (key_name) xmlFree (key_name);
 
                 ok = parse_param (reader, &value);
-                if (ok && G_VALUE_TYPE (&value) != G_TYPE_INVALID)
+                if (ok && value != NULL)
                 {
-                    pval = g_slice_new0 (GValue);
-                    g_value_init (pval, G_VALUE_TYPE (&value));
-                    g_value_copy (&value, pval);
-
-                    g_hash_table_insert (settings, key, pval);
+                    g_variant_ref_sink (value);
+                    g_hash_table_insert (settings, key, value);
                 }
                 else
                     g_free (key);
-
-                if (G_IS_VALUE(&value))
-                    g_value_unset (&value);
             }
             else if (strcmp (name, "group") == 0 &&
                      xmlTextReaderHasAttributes (reader))
