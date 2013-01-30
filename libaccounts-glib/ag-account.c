@@ -1086,8 +1086,8 @@ ag_account_class_init (AgAccountClass *klass)
     /**
      * AgAccount::enabled:
      * @account: the #AgAccount.
-     * @service: the service which was enabled/disabled, or %NULL if the global
-     * enabledness of the account changed.
+     * @service: the service which was enabled/disabled, or "global" if the
+     * global enabledness of the account changed.
      * @enabled: the new state of the @account.
      *
      * Emitted when the account "enabled" status was changed for one of its
